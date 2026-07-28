@@ -23,6 +23,12 @@ struct ContentView: View {
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var brightnessManager = BrightnessManager.shared
     @ObservedObject var volumeManager = VolumeManager.shared
+    @ObservedObject var lockScreenState = LockScreenState.shared
+    @ObservedObject var caffeineManager = CaffeineManager.shared
+    @ObservedObject var clockManager = ClockManager.shared
+    @ObservedObject var downloadManager = DownloadManager.shared
+    @ObservedObject var systemStats = SystemStatsManager.shared
+    @ObservedObject var screenshotManager = ScreenshotManager.shared
     @State private var hoverTask: Task<Void, Never>?
     @State private var isHovering: Bool = false
     @State private var anyDropDebounceTask: Task<Void, Never>?
@@ -37,6 +43,10 @@ struct ContentView: View {
     @Namespace var albumArtNamespace
 
     @Default(.showNotHumanFace) var showNotHumanFace
+    // Read as preferences rather than through `Defaults[…]` so toggling them
+    // redraws the closed notch straight away.
+    @Default(.clockEnabled) var clockEnabled
+    @Default(.clockShowOnClosedNotch) var clockShowOnClosedNotch
 
     // Use standardized animations from StandardAnimations enum
     private let animationSpring = StandardAnimations.interactive
@@ -91,12 +101,51 @@ struct ContentView: View {
         if coordinator.expandingView.type == .battery && coordinator.expandingView.show
             && vm.notchState == .closed && Defaults[.showPowerStatusNotifications]
         {
-            chinWidth = 640
+            chinWidth = liveActivityWidth
+        } else if coordinator.expandingView.type == .caffeine && coordinator.expandingView.show
+            && vm.notchState == .closed && Defaults[.caffeineEnabled] && Defaults[.caffeineLiveActivity]
+        {
+            chinWidth = liveActivityWidth
+        } else if coordinator.expandingView.type == .bluetooth && coordinator.expandingView.show
+            && vm.notchState == .closed && Defaults[.bluetoothLiveActivity]
+        {
+            chinWidth = liveActivityWidth
+        } else if coordinator.expandingView.type == .download && coordinator.expandingView.show
+            && vm.notchState == .closed && Defaults[.enableDownloadListener]
+        {
+            chinWidth = liveActivityWidth
+        } else if coordinator.expandingView.type == .notification && coordinator.expandingView.show
+            && vm.notchState == .closed && Defaults[.notificationsEnabled] && Defaults[.notificationsLiveActivity]
+        {
+            chinWidth = liveActivityWidth
+        } else if coordinator.expandingView.type == .screenshot && coordinator.expandingView.show
+            && vm.notchState == .closed && Defaults[.screenshotCatcherEnabled]
+        {
+            chinWidth = liveActivityWidth
+        } else if lockScreenState.isLocked && Defaults[.lockScreenWidgetsEnabled]
+            && Defaults[.showOnLockScreen] && vm.notchState == .closed
+        {
+            chinWidth = liveActivityWidth
         } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music)
             && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle)
             && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed
         {
-            chinWidth += (2 * max(0, displayClosedNotchHeight - 12) + 20 + 2 * liveActivityEdgeMargin + 2)
+            let sideWidth = showsClockInMusicActivity
+                ? ClockClosedIndicator.trailingWidth
+                : max(0, displayClosedNotchHeight - 12)
+            chinWidth += (2 * sideWidth + 20 + 2 * liveActivityEdgeMargin + 2)
+        } else if showsDownloadClosedIndicator {
+            chinWidth += 2 * DownloadClosedIndicator.trailingWidth
+        } else if showsClockClosedIndicator {
+            chinWidth += 2 * ClockClosedIndicator.trailingWidth
+        } else if !coordinator.expandingView.show && vm.notchState == .closed
+            && (!musicManager.isPlaying && musicManager.isPlayerIdle) && !vm.hideOnClosed
+            && Defaults[.caffeineEnabled] && Defaults[.caffeineNotchCountdown]
+            && caffeineManager.isActive
+        {
+            chinWidth += 2 * (caffeineManager.formattedRemaining == nil ? 24 : 62)
+        } else if showsSystemStatsIndicator {
+            chinWidth += 2 * SystemStatsClosedIndicator.sideWidth
         } else if !coordinator.expandingView.show && vm.notchState == .closed
             && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace]
             && !vm.hideOnClosed
@@ -105,6 +154,60 @@ struct ContentView: View {
         }
 
         return chinWidth
+    }
+
+    /// Height of the opened panel, with room added for the downloads strip
+    /// while it is showing — otherwise it would eat into the tab's own space.
+    private var openPanelHeight: CGFloat {
+        vm.notchSize.height
+            + (showsDownloadOpenBar ? DownloadOpenNotchBar.height : 0)
+            + (showsScreenshotOpenBar ? ScreenshotOpenNotchBar.height : 0)
+    }
+
+    private var showsDownloadOpenBar: Bool {
+        vm.notchState == .open && DownloadClosedIndicator.isActive
+    }
+
+    /// The screenshot preview only appears while there is a fresh capture to
+    /// act on; it clears itself after that.
+    private var showsScreenshotOpenBar: Bool {
+        vm.notchState == .open && Defaults[.screenshotCatcherEnabled] && screenshotManager.latest != nil
+    }
+
+    /// A download in flight sits on the closed notch until it finishes, rather
+    /// than only flashing a banner as it starts. It outranks the clock and Keep
+    /// Awake readings: it is the one that ends on its own.
+    private var showsDownloadClosedIndicator: Bool {
+        !coordinator.expandingView.show && vm.notchState == .closed
+            && !musicManager.isPlaying && musicManager.isPlayerIdle && !vm.hideOnClosed
+            && DownloadClosedIndicator.isActive
+    }
+
+    /// System load is the lowest-priority thing the closed notch can show: it
+    /// is always true, so anything with an actual event behind it wins.
+    private var showsSystemStatsIndicator: Bool {
+        !coordinator.expandingView.show && vm.notchState == .closed
+            && !musicManager.isPlaying && musicManager.isPlayerIdle && !vm.hideOnClosed
+            && SystemStatsClosedIndicator.isActive
+    }
+
+    /// A running countdown or stopwatch takes the closed notch when there is no
+    /// live activity or playing music competing for it — the same slot, and the
+    /// same conditions, as the Keep Awake countdown, which it outranks.
+    ///
+    /// While music holds that slot the reading is not dropped: it takes the
+    /// spectrum's place instead, see `showsClockInMusicActivity`.
+    private var showsClockClosedIndicator: Bool {
+        !coordinator.expandingView.show && vm.notchState == .closed
+            && !musicManager.isPlaying && musicManager.isPlayerIdle && !vm.hideOnClosed
+            && ClockClosedIndicator.isActive
+    }
+
+    /// The music live activity gives up its spectrum to a running timer or
+    /// stopwatch: a countdown is worth more than a decoration, and this way
+    /// neither the artwork nor the reading has to be dropped.
+    private var showsClockInMusicActivity: Bool {
+        ClockClosedIndicator.isActive
     }
 
     // If the closed notch height is 0 (any display/setting), display a 10pt nearly-invisible notch
@@ -147,7 +250,20 @@ struct ContentView: View {
                     .opacity((isNotchHeightZero && vm.notchState == .closed) ? 0.01 : 1)
                 
                 mainLayout
-                    .frame(height: vm.notchState == .open ? vm.notchSize.height : nil)
+                    // Fixed-height tabs (player, shelf, clock) keep their
+                    // envelope so their controls do not jump about.
+                    .frame(
+                        height: (vm.notchState == .open && !coordinator.currentView.hugsContent)
+                            ? openPanelHeight : nil
+                    )
+                    // Content-hugging tabs get no height frame at all,
+                    // deliberately: a frame with a `maxHeight` takes the whole
+                    // height it is offered rather than shrinking to its child,
+                    // so the panel — and with it the hover area — stayed the
+                    // size of the envelope however little was in it. Those
+                    // views size themselves against `openSize`, so leaving the
+                    // panel to its content makes it exactly as tall as what it
+                    // is showing.
                     .conditionalModifier(true) { view in
                         return view
                             .animation(vm.notchState == .open ? StandardAnimations.open : StandardAnimations.close, value: vm.notchState)
@@ -195,6 +311,14 @@ struct ContentView: View {
                             }
                         }
                     }
+                    .onChange(of: coordinator.currentView) { _, newView in
+                        // Tabs can request different envelopes, so resize when
+                        // switching between them with the notch already open.
+                        guard vm.notchState == .open else { return }
+                        withAnimation(StandardAnimations.open) {
+                            vm.notchSize = newView.openSize
+                        }
+                    }
                     .onChange(of: vm.notchState) { _, newState in
                         if newState == .closed && isHovering {
                             withAnimation {
@@ -238,7 +362,15 @@ struct ContentView: View {
             }
         }
         .padding(.bottom, 8)
-        .frame(maxWidth: windowSize.width, maxHeight: windowSize.height, alignment: .top)
+        // An exact height, not a ceiling: the root has to be the window's own
+        // height for the panel to land against its top edge. Sized to its
+        // content instead, the root sits at the window's bottom-left origin and
+        // the panel hangs below the menu bar by whatever height it is missing —
+        // worse the taller the window. `maxHeight` does not fix that, because a
+        // hosting view that sizes to fit never proposes the full height for an
+        // `.infinity` frame to take up.
+        .frame(maxWidth: windowSize.width)
+        .frame(height: windowSize.height, alignment: .top)
         .ignoresSafeArea(.all)
         .compositingGroup()
         .scaleEffect(
@@ -322,6 +454,26 @@ struct ContentView: View {
                             .frame(width: 76, alignment: .trailing)
                         }
                         .frame(height: displayClosedNotchHeight, alignment: .center)
+                      } else if coordinator.expandingView.type == .caffeine && coordinator.expandingView.show
+                        && vm.notchState == .closed && Defaults[.caffeineEnabled] && Defaults[.caffeineLiveActivity]
+                      {
+                          CaffeineLiveActivity(closedNotchHeight: displayClosedNotchHeight)
+                      } else if coordinator.expandingView.type == .bluetooth && coordinator.expandingView.show
+                        && vm.notchState == .closed && Defaults[.bluetoothLiveActivity]
+                      {
+                          BluetoothLiveActivity(closedNotchHeight: displayClosedNotchHeight)
+                      } else if coordinator.expandingView.type == .download && coordinator.expandingView.show
+                        && vm.notchState == .closed && Defaults[.enableDownloadListener]
+                      {
+                          DownloadLiveActivity(closedNotchHeight: displayClosedNotchHeight)
+                      } else if coordinator.expandingView.type == .notification && coordinator.expandingView.show
+                        && vm.notchState == .closed && Defaults[.notificationsEnabled] && Defaults[.notificationsLiveActivity]
+                      {
+                          NotificationLiveActivity(closedNotchHeight: displayClosedNotchHeight)
+                      } else if coordinator.expandingView.type == .screenshot && coordinator.expandingView.show
+                        && vm.notchState == .closed && Defaults[.screenshotCatcherEnabled]
+                      {
+                          ScreenshotLiveActivity(closedNotchHeight: displayClosedNotchHeight)
                       } else if coordinator.shouldShowSneakPeek(on: vm.screenUUID) && Defaults[.inlineOSD] && (coordinator.sneakPeekState(for: vm.screenUUID).type != .music) && (coordinator.sneakPeekState(for: vm.screenUUID).type != .battery) && vm.notchState == .closed {
                           InlineOSD(
                               type: coordinator.binding(for: vm.screenUUID).type,
@@ -335,6 +487,20 @@ struct ContentView: View {
                       } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed {
                           MusicLiveActivity()
                               .frame(alignment: .center)
+                      } else if lockScreenState.isLocked && Defaults[.lockScreenWidgetsEnabled]
+                        && Defaults[.showOnLockScreen] && vm.notchState == .closed {
+                          LockScreenWidgetBar(closedNotchHeight: displayClosedNotchHeight)
+                      } else if showsDownloadClosedIndicator {
+                          DownloadClosedIndicator(closedNotchHeight: displayClosedNotchHeight)
+                      } else if showsClockClosedIndicator {
+                          ClockClosedIndicator(closedNotchHeight: displayClosedNotchHeight)
+                      } else if !coordinator.expandingView.show && vm.notchState == .closed
+                        && (!musicManager.isPlaying && musicManager.isPlayerIdle) && !vm.hideOnClosed
+                        && Defaults[.caffeineEnabled] && Defaults[.caffeineNotchCountdown]
+                        && CaffeineManager.shared.isActive {
+                          CaffeineClosedIndicator(closedNotchHeight: displayClosedNotchHeight)
+                      } else if showsSystemStatsIndicator {
+                          SystemStatsClosedIndicator(closedNotchHeight: displayClosedNotchHeight)
                       } else if !coordinator.expandingView.show && vm.notchState == .closed && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace] && !vm.hideOnClosed  {
                           BoringFaceAnimation()
                        } else if vm.notchState == .open {
@@ -395,16 +561,44 @@ struct ContentView: View {
             if vm.notchState == .open {
                 VStack {
                     switch coordinator.currentView {
-                    case .home:
-                        NotchHomeView(
+                    case .player:
+                        NotchPlayerView(
                             albumArtNamespace: albumArtNamespace,
                             horizontalMediaGestureFeedback: horizontalMediaGestureFeedback,
                             isHoveringMusicArea: $isHoveringMusicArea
                         )
                     case .shelf:
                         ShelfView()
+                    case .calendar:
+                        // Spans the tab's whole envelope rather than the old
+                        // sidebar slot it used to occupy in the home view, so
+                        // event titles have room to be read.
+                        CalendarView()
+                            .frame(width: NotchViews.calendar.contentWidth)
+                            .onHover { vm.isHoveringCalendar = $0 }
+                    case .weather:
+                        WeatherView()
+                    case .clipboard:
+                        ClipboardView()
+                    case .apps:
+                        AppSwitcherView()
+                    case .clock:
+                        ClockView()
+                    case .systemStats:
+                        SystemStatsView()
+                    case .bluetooth:
+                        BluetoothDevicesView()
                     }
                 }
+                // No explicit width: the panel hugs whatever the current view
+                // needs, up to the envelope. Each view is responsible for
+                // having an intrinsic width rather than expanding to fill.
+                // Spans the panel and stays centred on it. The enclosing stack
+                // is leading-aligned, so a view narrower than the panel would
+                // otherwise hug the left edge and read as a notch that has
+                // drifted off centre.
+                .frame(maxWidth: coordinator.currentView.contentWidth)
+                .frame(maxWidth: .infinity)
                 .transition(
                     .scale(scale: 0.8, anchor: .top)
                     .combined(with: .opacity)
@@ -413,6 +607,23 @@ struct ContentView: View {
                 .zIndex(1)
                 .allowsHitTesting(vm.notchState == .open)
                 .opacity(gestureProgress != 0 ? 1.0 - min(abs(gestureProgress) * 0.1, 0.3) : 1.0)
+
+                // Downloads sit under whichever tab is open: they are not tied
+                // to one destination, and they end on their own. The panel is
+                // grown by `DownloadOpenNotchBar.height` to fit this.
+                if showsScreenshotOpenBar {
+                    ScreenshotOpenNotchBar()
+                        .frame(maxWidth: coordinator.currentView.contentWidth)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        .zIndex(1)
+                }
+
+                if showsDownloadOpenBar {
+                    DownloadOpenNotchBar()
+                        .frame(maxWidth: coordinator.currentView.contentWidth)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        .zIndex(1)
+                }
             }
         }
         .onDrop(of: [.fileURL, .url, .utf8PlainText, .plainText, .data], delegate: GeneralDropTargetDelegate(isTargeted: $vm.generalDropTargeting))
@@ -464,6 +675,12 @@ struct ContentView: View {
                     width: scaledArtSize,
                     height: scaledArtSize
                 )
+                // Both sides have to match in width or the opaque spacer stops
+                // lining up with the physical notch.
+                .frame(
+                    width: showsClockInMusicActivity ? ClockClosedIndicator.trailingWidth : scaledArtSize,
+                    alignment: .leading
+                )
 
             Rectangle()
                 .fill(.black)
@@ -512,20 +729,26 @@ struct ContentView: View {
                 )
 
             HStack {
-                AudioSpectrumView(
-                    isPlaying: musicManager.isPlaying,
-                    tintColor: Defaults[.coloredSpectrogram]
-                    ? Color(nsColor: musicManager.avgColor).ensureMinimumBrightness(factor: 0.5)
-                    : Color.gray
-                )
-                .frame(width: 18, height: 12)
+                if showsClockInMusicActivity {
+                    ClockClosedReading()
+                } else {
+                    AudioSpectrumView(
+                        isPlaying: musicManager.isPlaying,
+                        tintColor: Defaults[.coloredSpectrogram]
+                        ? Color(nsColor: musicManager.avgColor).ensureMinimumBrightness(factor: 0.5)
+                        : Color.gray
+                    )
+                    .frame(width: 18, height: 12)
+                }
             }
             .frame(
-                width: max(
-                    0,
-                    displayClosedNotchHeight - 12
-                        + gestureProgress / 2
-                ),
+                width: showsClockInMusicActivity
+                    ? ClockClosedIndicator.trailingWidth
+                    : max(
+                        0,
+                        displayClosedNotchHeight - 12
+                            + gestureProgress / 2
+                    ),
                 height: max(
                     0,
                     displayClosedNotchHeight - 12
@@ -743,7 +966,7 @@ struct ContentView: View {
             return coordinator.musicLiveActivityEnabled && (musicManager.isPlaying || !musicManager.isPlayerIdle)
 
         case .open:
-            return coordinator.currentView == .home && !musicManager.isPlayerIdle && isHoveringMusicArea
+            return coordinator.currentView == .player && !musicManager.isPlayerIdle && isHoveringMusicArea
         }
     }
 }

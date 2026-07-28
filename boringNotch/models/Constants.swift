@@ -114,6 +114,9 @@ extension Notification.Name {
     // MARK: - Shelf
     static let expandedDragDetectionChanged = Notification.Name("expandedDragDetectionChanged")
     
+    // MARK: - Clock
+    static let clockTimerFinished = Notification.Name("clockTimerFinished")
+
     // MARK: - System
     static let accessibilityAuthorizationChanged = Notification.Name("accessibilityAuthorizationChanged")
     
@@ -239,7 +242,6 @@ extension Defaults.Keys {
     static let isMirrored = Key<Bool>("isMirrored", default: true)
     static let mirrorShape = Key<MirrorShapeEnum>("mirrorShape", default: MirrorShapeEnum.rectangle)
     static let mirrorCameraID = Key<String?>("mirrorCameraID", default: nil)
-    static let settingsIconInNotch = Key<Bool>("settingsIconInNotch", default: true)
     static let lightingEffect = Key<Bool>("lightingEffect", default: true)
     static let enableShadow = Key<Bool>("enableShadow", default: true)
     static let cornerRadiusScaling = Key<Bool>("cornerRadiusScaling", default: true)
@@ -284,9 +286,141 @@ extension Defaults.Keys {
     static let showPowerStatusIcons = Key<Bool>("showPowerStatusIcons", default: true)
     static let showChargingWattage = Key<Bool>("showChargingWattage", default: true)
     
+    // MARK: Layout
+    static let notchHeaderItems = Key<[NotchHeaderItem]>(
+        "notchHeaderItems",
+        default: NotchHeaderItem.defaultOrder
+    )
+    static let notchTabOrder = Key<[NotchTabItem]>(
+        "notchTabOrder",
+        default: NotchTabItem.defaultOrder
+    )
+    static let notchDefaultTab = Key<NotchTabItem>("notchDefaultTab", default: NotchTabItem.player)
+    /// The tab the notch was last showing, so "Remember last tab" survives a
+    /// relaunch and not just a close.
+    static let lastOpenedTab = Key<NotchTabItem>("lastOpenedTab", default: NotchTabItem.player)
+
+    // MARK: Lock screen
+    static let lockScreenWidgetsEnabled = Key<Bool>("lockScreenWidgetsEnabled", default: false)
+    static let lockScreenWidgets = Key<[LockScreenWidget]>(
+        "lockScreenWidgets",
+        default: LockScreenWidget.defaultSelection
+    )
+
+    // MARK: Notifications
+    static let notificationsEnabled = Key<Bool>("notificationsEnabled", default: false)
+    static let notificationsLiveActivity = Key<Bool>("notificationsLiveActivity", default: true)
+    static let notificationsShowBody = Key<Bool>("notificationsShowBody", default: true)
+    static let notificationsExcludedApps = Key<[String]>("notificationsExcludedApps", default: [])
+
+    // MARK: Function buttons
+    static let functionButtonsEnabled = Key<Bool>("functionButtonsEnabled", default: false)
+    static let functionButtonsShowLabels = Key<Bool>("functionButtonsShowLabels", default: true)
+    static let functionButtons = Key<[FunctionButton]>("functionButtons", default: [])
+
+    // MARK: Clipboard history
+    static let clipboardHistoryEnabled = Key<Bool>("clipboardHistoryEnabled", default: false)
+    static let clipboardShowInNotch = Key<Bool>("clipboardShowInNotch", default: true)
+    static let clipboardHistoryLimit = Key<Int>("clipboardHistoryLimit", default: 100)
+    static let clipboardIgnoreConfidential = Key<Bool>("clipboardIgnoreConfidential", default: true)
+    static let clipboardStoreImages = Key<Bool>("clipboardStoreImages", default: true)
+    static let clipboardPersistHistory = Key<Bool>("clipboardPersistHistory", default: false)
+    static let clipboardExcludedApps = Key<[String]>(
+        "clipboardExcludedApps",
+        default: ["com.agilebits.onepassword7", "com.1password.1password", "com.apple.keychainaccess"]
+    )
+
+    // MARK: App switcher
+    static let appSwitcherEnabled = Key<Bool>("appSwitcherEnabled", default: false)
+    static let appSwitcherShowTab = Key<Bool>("appSwitcherShowTab", default: true)
+    static let appSwitcherIncludeMinimized = Key<Bool>("appSwitcherIncludeMinimized", default: true)
+
+    // MARK: Screenshots
+    static let screenshotCatcherEnabled = Key<Bool>("screenshotCatcherEnabled", default: false)
+    /// Folder macOS writes screenshots to, granted once by the user.
+    static let screenshotFolderBookmark = Key<Data?>("screenshotFolderBookmark", default: nil)
+    static let screenshotAddToShelf = Key<Bool>("screenshotAddToShelf", default: false)
+    static let screenshotPreviewSeconds = Key<Int>("screenshotPreviewSeconds", default: 30)
+
+    // MARK: System stats
+    static let systemStatsEnabled = Key<Bool>("systemStatsEnabled", default: false)
+    static let systemStatsShowOnClosedNotch = Key<Bool>("systemStatsShowOnClosedNotch", default: true)
+    /// Stats icon in the opened notch header, which opens the graphs.
+    static let systemStatsNotchIcon = Key<Bool>("systemStatsNotchIcon", default: true)
+    static let systemStatsShowCPU = Key<Bool>("systemStatsShowCPU", default: true)
+    static let systemStatsShowMemory = Key<Bool>("systemStatsShowMemory", default: true)
+    static let systemStatsShowNetwork = Key<Bool>("systemStatsShowNetwork", default: true)
+
+    // MARK: Clock, timer and stopwatch
+    static let clockEnabled = Key<Bool>("clockEnabled", default: true)
+    static let clockShowInNotch = Key<Bool>("clockShowInNotch", default: true)
+    static let clockMode = Key<ClockMode>("clockMode", default: ClockMode.clock)
+    static let clockShowSeconds = Key<Bool>("clockShowSeconds", default: true)
+    static let clockUse24Hour = Key<Bool>("clockUse24Hour", default: false)
+    /// Follow the system's 12/24-hour setting instead of `clockUse24Hour`.
+    static let clockFollowSystemFormat = Key<Bool>("clockFollowSystemFormat", default: true)
+    static let clockShowAnalogFace = Key<Bool>("clockShowAnalogFace", default: true)
+    static let clockDefaultTimerMinutes = Key<Int>("clockDefaultTimerMinutes", default: 5)
+    /// Keeps a running countdown or stopwatch on the closed notch.
+    static let clockShowOnClosedNotch = Key<Bool>("clockShowOnClosedNotch", default: true)
+    /// Play a sound when a timer reaches zero.
+    static let clockTimerSound = Key<Bool>("clockTimerSound", default: true)
+    /// Open the notch when a timer reaches zero, so it is noticed.
+    static let clockTimerOpensNotch = Key<Bool>("clockTimerOpensNotch", default: true)
+
+    // MARK: Weather
+    static let weatherEnabled = Key<Bool>("weatherEnabled", default: false)
+    static let weatherLocationMode = Key<WeatherLocationMode>(
+        "weatherLocationMode",
+        default: WeatherLocationMode.automatic
+    )
+    static let weatherManualPlace = Key<WeatherPlace?>("weatherManualPlace", default: nil)
+    /// Cached reverse-geocoded name for the automatic location, so a refresh
+    /// does not have to hit the geocoder every time.
+    static let weatherResolvedPlace = Key<WeatherPlace?>("weatherResolvedPlace", default: nil)
+    static let weatherTemperatureUnit = Key<TemperatureUnit>(
+        "weatherTemperatureUnit",
+        default: TemperatureUnit.systemDefault
+    )
+    static let weatherWindSpeedUnit = Key<WindSpeedUnit>("weatherWindSpeedUnit", default: .kmh)
+    static let weatherRefreshMinutes = Key<Int>("weatherRefreshMinutes", default: 30)
+    static let weatherShowInNotch = Key<Bool>("weatherShowInNotch", default: true)
+    static let weatherShowHourlyForecast = Key<Bool>("weatherShowHourlyForecast", default: true)
+    static let weatherShowDailyForecast = Key<Bool>("weatherShowDailyForecast", default: true)
+
+    // MARK: Bluetooth
+    static let bluetoothLiveActivity = Key<Bool>("bluetoothLiveActivity", default: true)
+    static let bluetoothNotifyOnConnect = Key<Bool>("bluetoothNotifyOnConnect", default: true)
+    static let bluetoothNotifyOnDisconnect = Key<Bool>("bluetoothNotifyOnDisconnect", default: true)
+    static let bluetoothShowBatteryLevel = Key<Bool>("bluetoothShowBatteryLevel", default: true)
+    /// Accessory battery list in the opened notch header.
+    static let bluetoothNotchIcon = Key<Bool>("bluetoothNotchIcon", default: true)
+
+    // MARK: Caffeine
+    static let caffeineEnabled = Key<Bool>("caffeineEnabled", default: true)
+    static let caffeineDefaultDuration = Key<CaffeineDuration>(
+        "caffeineDefaultDuration",
+        default: CaffeineDuration.indefinite
+    )
+    static let caffeineAllowDisplaySleep = Key<Bool>("caffeineAllowDisplaySleep", default: false)
+    static let caffeineActivateOnLaunch = Key<Bool>("caffeineActivateOnLaunch", default: false)
+    /// Adds Keep Awake controls to the main Boring Notch menu bar item.
+    static let caffeineShowInMenuBar = Key<Bool>("caffeineShowInMenuBar", default: true)
+    /// Cup button in the opened notch header, for toggling Keep Awake there.
+    static let caffeineNotchIcon = Key<Bool>("caffeineNotchIcon", default: true)
+    /// Keeps the remaining time on the closed notch while a timed session runs.
+    static let caffeineNotchCountdown = Key<Bool>("caffeineNotchCountdown", default: true)
+    static let caffeineLiveActivity = Key<Bool>("caffeineLiveActivity", default: true)
+    static let caffeineShowCountdown = Key<Bool>("caffeineShowCountdown", default: true)
+
     // MARK: Downloads
     static let enableDownloadListener = Key<Bool>("enableDownloadListener", default: true)
     static let enableSafariDownloads = Key<Bool>("enableSafariDownloads", default: true)
+    static let enableChromiumDownloads = Key<Bool>("enableChromiumDownloads", default: true)
+    static let enableFirefoxDownloads = Key<Bool>("enableFirefoxDownloads", default: true)
+    /// Security-scoped bookmark for the Downloads folder. The sandbox grants no
+    /// access to it by default, so the user has to pick it once.
+    static let downloadsFolderBookmark = Key<Data?>("downloadsFolderBookmark", default: nil)
     static let selectedDownloadIndicatorStyle = Key<DownloadIndicatorStyle>("selectedDownloadIndicatorStyle", default: DownloadIndicatorStyle.progress)
     static let selectedDownloadIconStyle = Key<DownloadIconStyle>("selectedDownloadIconStyle", default: DownloadIconStyle.onlyAppIcon)
     

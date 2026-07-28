@@ -1,5 +1,5 @@
 //
-//  NotchHomeView.swift
+//  NotchPlayerView.swift
 //  boringNotch
 //
 //  Created by Hugo Persson on 2024-08-18.
@@ -19,12 +19,20 @@ struct MusicPlayerView: View {
     @Binding var isHoveringMusicArea: Bool
 
     var body: some View {
-        HStack {
-            AlbumArtView(vm: vm, albumArtNamespace: albumArtNamespace).frame(width: 120).padding(.all, 5 * (vm.notchSize.height / 190))
+        // The art grows with the panel instead of sitting at a fixed 120pt, and
+        // the controls take everything left over.
+        HStack(spacing: 10) {
+            AlbumArtView(vm: vm, albumArtNamespace: albumArtNamespace)
+                .aspectRatio(1, contentMode: .fit)
+                .frame(maxWidth: 140, maxHeight: .infinity)
+                .padding(.vertical, 5 * (vm.notchSize.height / 190))
+
             MusicControlsView(horizontalMediaGestureFeedback: horizontalMediaGestureFeedback)
                 .drawingGroup()
                 .compositingGroup()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         .onHover { hovering in
             isHoveringMusicArea = hovering
@@ -240,8 +248,10 @@ struct MusicControlsView: View {
         )
         let padded = slotConfig.padded(to: sanitizedLimit, filler: .none)
         let result = Array(padded.prefix(sanitizedLimit))
-        // If calendar and camera are both visible alongside music, hide the edge slots
-        let shouldHideEdges = Defaults[.showCalendar] && Defaults[.showMirror] && webcamManager.cameraAvailable && vm.isCameraExpanded
+        // The camera preview competes with the music controls for width, so
+        // drop the edge slots while it is expanded. (The calendar used to sit
+        // here too; it now has its own tab.)
+        let shouldHideEdges = Defaults[.showMirror] && webcamManager.cameraAvailable && vm.isCameraExpanded
         if shouldHideEdges && result.count >= 5 {
             return Array(result.dropFirst().dropLast())
         }
@@ -419,7 +429,7 @@ struct VolumeControlView: View {
 
 // MARK: - Main View
 
-struct NotchHomeView: View {
+struct NotchPlayerView: View {
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject var webcamManager = WebcamManager.shared
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
@@ -429,8 +439,16 @@ struct NotchHomeView: View {
     @Binding var isHoveringMusicArea: Bool
 
     var body: some View {
-        mainContent
-            .transition(.opacity)
+        // This tab's panel is a fixed size, so claim all of it: the player used
+        // to lay out at its intrinsic size and leave the rest of the opened
+        // notch as dead space.
+        VStack(spacing: 6) {
+            mainContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            FunctionButtonBar()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .transition(.opacity)
     }
 
     private var shouldShowCamera: Bool {
@@ -438,22 +456,14 @@ struct NotchHomeView: View {
     }
 
     private var mainContent: some View {
-        HStack(alignment: .top, spacing: (shouldShowCamera && Defaults[.showCalendar]) ? 10 : 15) {
+        // The calendar lives in its own tab; this one is the media player (plus
+        // the camera preview when it is expanded).
+        HStack(alignment: .center, spacing: 15) {
             MusicPlayerView(
                 albumArtNamespace: albumArtNamespace,
                 horizontalMediaGestureFeedback: horizontalMediaGestureFeedback,
                 isHoveringMusicArea: $isHoveringMusicArea
             )
-
-            if Defaults[.showCalendar] {
-                CalendarView()
-                    .frame(width: shouldShowCamera ? 170 : 215)
-                    .onHover { isHovering in
-                        vm.isHoveringCalendar = isHovering
-                    }
-                    .environmentObject(vm)
-                    .transition(.opacity)
-            }
 
             if shouldShowCamera {
                 CameraPreviewView(webcamManager: webcamManager)
@@ -463,6 +473,7 @@ struct NotchHomeView: View {
                     .animation(.interactiveSpring(response: 0.32, dampingFraction: 0.76, blendDuration: 0), value: shouldShowCamera)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .transition(.opacity)
         .blur(radius: vm.notchState == .closed ? 30 : 0)
     }

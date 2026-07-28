@@ -18,6 +18,10 @@ enum SneakContentType {
     case mic
     case battery
     case download
+    case caffeine
+    case bluetooth
+    case notification
+    case screenshot
 }
 
 struct sneakPeek {
@@ -52,7 +56,16 @@ struct ExpandedItem {
 class BoringViewCoordinator: ObservableObject {
     static let shared = BoringViewCoordinator()
 
-    @Published var currentView: NotchViews = .home
+    @Published var currentView: NotchViews = .player {
+        didSet {
+            guard currentView != oldValue else { return }
+            // Recorded on every change rather than on close: the notch can be
+            // dismissed in ways that never run `close()`.
+            if let item = NotchTabItem.allCases.first(where: { $0.view == currentView }) {
+                Defaults[.lastOpenedTab] = item
+            }
+        }
+    }
     @Published var helloAnimationRunning: Bool = false
     private var sneakPeekDispatch: DispatchWorkItem?
     private var expandingViewDispatch: DispatchWorkItem?
@@ -67,13 +80,13 @@ class BoringViewCoordinator: ObservableObject {
             if !alwaysShowTabs {
                 openLastTabByDefault = false
                 if ShelfStateViewModel.shared.isEmpty || !Defaults[.openShelfByDefault] {
-                    currentView = .home
+                    currentView = .player
                 }
             }
         }
     }
 
-    @AppStorage("openLastTabByDefault") var openLastTabByDefault: Bool = false {
+    @AppStorage("openLastTabByDefault") var openLastTabByDefault: Bool = true {
         didSet {
             if openLastTabByDefault {
                 alwaysShowTabs = true
@@ -99,7 +112,7 @@ class BoringViewCoordinator: ObservableObject {
     @Published var optionKeyPressed: Bool = true
     private var accessibilityObserver: Any?
     private var osdReplacementCancellable: AnyCancellable?
-    private var boringShelfCancellable: AnyCancellable?
+    private var tabVisibilityCancellables: [AnyCancellable] = []
     private var osdSourceCancellables: [AnyCancellable] = []
 
     private init() {
@@ -163,17 +176,34 @@ class BoringViewCoordinator: ObservableObject {
             Defaults.publisher(.osdBrightnessSource).sink { [weak self] _ in Task { @MainActor in self?.applyOSDSources() } },
             Defaults.publisher(.osdVolumeSource).sink { [weak self] _ in Task { @MainActor in self?.applyOSDSources() } }
         ]
-        boringShelfCancellable = Defaults.publisher(.boringShelf)
-            .sink { [weak self] change in
+        // Turning a feature off while its panel is on screen would otherwise
+        // leave the notch showing a destination the user can no longer reach.
+        // Every tab's governing preference is watched, weather included — it
+        // has no tab of its own, so nothing else would move the panel off it.
+        tabVisibilityCancellables = [
+            Defaults.publisher(.boringShelf),
+            Defaults.publisher(.showCalendar),
+            Defaults.publisher(.weatherEnabled),
+            Defaults.publisher(.weatherShowInNotch),
+            Defaults.publisher(.clipboardHistoryEnabled),
+            Defaults.publisher(.clipboardShowInNotch),
+            Defaults.publisher(.appSwitcherEnabled),
+            Defaults.publisher(.appSwitcherShowTab),
+            Defaults.publisher(.clockEnabled),
+            Defaults.publisher(.clockShowInNotch),
+            Defaults.publisher(.systemStatsEnabled),
+            Defaults.publisher(.systemStatsNotchIcon),
+            Defaults.publisher(.bluetoothNotchIcon)
+        ].map { publisher in
+            publisher.sink { [weak self] _ in
                 Task { @MainActor in
-                    guard let self = self else { return }
-                    if !change.newValue && self.currentView == .shelf {
-                        self.currentView = .home
-                    }
+                    self?.fallBackToPlayerIfCurrentViewIsUnavailable()
                 }
             }
+        }
 
         Task { @MainActor in
+            restoreLastOpenedTab()
             helloAnimationRunning = firstLaunch
 
             if Defaults[.osdReplacement] {
@@ -412,6 +442,38 @@ class BoringViewCoordinator: ObservableObject {
     }
     
     func showEmpty() {
-        currentView = .home
+        currentView = .player
+    }
+
+    /// Puts the panel back on the tab it was showing before the last quit.
+    ///
+    /// Skipped when the remembered tab's feature has since been switched off,
+    /// so the setting can never restore a destination that no longer exists.
+    private func restoreLastOpenedTab() {
+        guard openLastTabByDefault else { return }
+        let remembered = Defaults[.lastOpenedTab]
+        guard remembered.isEnabled || remembered.isShadowedByHeaderItem else { return }
+        currentView = remembered.view
+    }
+
+    /// The tab the notch returns to when it is not reopening the last one.
+    ///
+    /// Falls back to the player if the configured default has since been
+    /// switched off, so the setting can never strand the panel on a dead view.
+    var defaultTabView: NotchViews {
+        let item = Defaults[.notchDefaultTab]
+        guard item.isEnabled || item.isShadowedByHeaderItem else { return .player }
+        return item.view
+    }
+
+    /// Sends the panel back to the player when whatever it is showing has been
+    /// switched off. The player is always available, so it is the safe landing
+    /// spot.
+    func fallBackToPlayerIfCurrentViewIsUnavailable() {
+        guard let item = NotchTabItem.allCases.first(where: { $0.view == currentView }) else { return }
+        // A tab hidden only because its header icon replaces it is still a
+        // valid place to be.
+        guard !item.isEnabled, !item.isShadowedByHeaderItem else { return }
+        currentView = .player
     }
 }

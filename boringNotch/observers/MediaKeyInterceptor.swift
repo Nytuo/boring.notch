@@ -69,6 +69,18 @@ final class MediaKeyInterceptor {
             }
         }
 
+        await installTap()
+    }
+
+    /// Installs the event tap, on the main actor.
+    ///
+    /// `start()` is called from several places that all fire at launch — the
+    /// coordinator, the preference publisher and the accessibility-changed
+    /// notification — and used to race: each concurrent call found no tap,
+    /// created its own, and abandoned the previous one. Orphaned taps stay in
+    /// the event stream with nothing left to disable them.
+    @MainActor
+    private func installTap() {
         if let eventTap, isTapActive {
             CGEvent.tapEnable(tap: eventTap, enable: true)
             return
@@ -105,7 +117,10 @@ final class MediaKeyInterceptor {
             }
             CGEvent.tapEnable(tap: eventTap, enable: true)
         } else {
-            print("⚠️ [MediaKeyInterceptor] Failed to create media-key event tap")
+            // Almost always Accessibility: the permission is read when the tap
+            // is created, so a grant made while the app is running only takes
+            // effect on the next attempt.
+            NSLog("⚠️ [MediaKeyInterceptor] Could not create the media-key event tap — check Accessibility access")
         }
     }
 

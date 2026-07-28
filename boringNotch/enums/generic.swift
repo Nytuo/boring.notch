@@ -19,8 +19,45 @@ public enum NotchState {
 }
 
 public enum NotchViews {
-    case home
+    case player
     case shelf
+    case calendar
+    case weather
+    case clipboard
+    case apps
+    case clock
+    case systemStats
+    case bluetooth
+
+    /// Largest opened-notch envelope this view may use.
+    ///
+    /// This is a bound, not a target: views that hug their content stay smaller
+    /// when they have little to show.
+    var openSize: CGSize {
+        switch self {
+        case .player, .shelf, .clock:
+            return NotchOpenSize.standard
+        case .calendar, .weather, .clipboard, .apps, .systemStats, .bluetooth:
+            return NotchOpenSize.wide
+        }
+    }
+
+    /// Whether the panel should shrink to fit this view's content.
+    ///
+    /// The player, shelf and clock keep a fixed height so their controls do not
+    /// jump around as content changes; the list- and grid-style views look
+    /// wrong padded out to a fixed size, so they hug instead.
+    var hugsContent: Bool {
+        switch self {
+        case .player, .shelf, .clock:
+            return false
+        case .calendar, .weather, .clipboard, .apps, .bluetooth:
+            return true
+        case .systemStats:
+            // The graphs want the whole envelope; hugging would collapse them.
+            return false
+        }
+    }
 }
 
 enum DownloadIndicatorStyle: String, Defaults.Serializable {

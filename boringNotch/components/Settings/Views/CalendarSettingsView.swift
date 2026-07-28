@@ -21,8 +21,9 @@ struct CalendarSettings: View {
     var body: some View {
         Form {
             Defaults.Toggle(key: .showCalendar) {
-                Text("Show calendar")
+                Text("Show calendar tab in notch")
             }
+            HelpText("The calendar has its own tab in the opened notch.")
             Defaults.Toggle(key: .hideCompletedReminders) {
                 Text("Hide completed reminders")
             }

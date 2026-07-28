@@ -12,11 +12,25 @@ import SwiftUIIntrospect
 private enum SettingsTab: String, CaseIterable, Identifiable {
     case general
     case appearance
+    case layout
     case media
     case calendar
+    case clock
+    case systemStats
     case osd
     case battery
+    case caffeine
+    case bluetooth
+    case weather
     case shelf
+    case clipboard
+    case appSwitcher
+    case downloads
+    case screenshots
+    case functionButtons
+    case notifications
+    case extensions
+    case lockScreen
     case mirror
     case shortcuts
     case advanced
@@ -28,11 +42,25 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         switch self {
         case .general: "General"
         case .appearance: "Appearance"
+        case .layout: "Layout"
         case .media: "Media"
         case .calendar: "Calendar"
+        case .clock: "Clock"
+        case .systemStats: "System Stats"
         case .osd: "OSD"
         case .battery: "Battery"
+        case .caffeine: "Keep Awake"
+        case .bluetooth: "Bluetooth"
+        case .weather: "Weather"
         case .shelf: "Shelf"
+        case .clipboard: "Clipboard"
+        case .appSwitcher: "App Switcher"
+        case .downloads: "Downloads"
+        case .screenshots: "Screenshots"
+        case .functionButtons: "Function Buttons"
+        case .notifications: "Notifications"
+        case .extensions: "Extensions"
+        case .lockScreen: "Lock Screen"
         case .mirror: "Mirror"
         case .shortcuts: "Shortcuts"
         case .advanced: "Advanced"
@@ -44,11 +72,25 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         switch self {
         case .general: "gear"
         case .appearance: "eye"
+        case .layout: "rectangle.3.group"
         case .media: "play.laptopcomputer"
         case .calendar: "calendar"
+        case .clock: "clock"
+        case .systemStats: "gauge.with.dots.needle.bottom.50percent"
         case .osd: "dial.medium.fill"
         case .battery: "battery.100.bolt"
+        case .caffeine: "cup.and.saucer.fill"
+        case .bluetooth: "wave.3.right.circle"
+        case .weather: "cloud.sun.fill"
         case .shelf: "books.vertical"
+        case .clipboard: "doc.on.clipboard"
+        case .appSwitcher: "square.grid.2x2"
+        case .downloads: "arrow.down.circle"
+        case .screenshots: "camera.viewfinder"
+        case .functionButtons: "button.programmable"
+        case .notifications: "bell.badge"
+        case .extensions: "puzzlepiece.extension"
+        case .lockScreen: "lock.display"
         case .mirror: "camera"
         case .shortcuts: "keyboard"
         case .advanced: "gearshape.2"
@@ -86,16 +128,44 @@ struct SettingsView: View {
                     GeneralSettings()
                 case .appearance:
                     Appearance()
+                case .layout:
+                    LayoutSettings()
                 case .media:
                     Media()
                 case .calendar:
                     CalendarSettings()
+                case .clock:
+                    ClockSettings()
+                case .systemStats:
+                    SystemStatsSettings()
                 case .osd:
                     OSDSettings()
                 case .battery:
                     Charge()
+                case .caffeine:
+                    CaffeineSettings()
+                case .bluetooth:
+                    BluetoothSettings()
+                case .weather:
+                    WeatherSettings()
                 case .shelf:
                     Shelf()
+                case .clipboard:
+                    ClipboardSettings()
+                case .appSwitcher:
+                    AppSwitcherSettings()
+                case .downloads:
+                    DownloadSettings()
+                case .screenshots:
+                    ScreenshotSettings()
+                case .functionButtons:
+                    FunctionButtonSettings()
+                case .notifications:
+                    NotificationSettings()
+                case .extensions:
+                    ExtensionsSettings()
+                case .lockScreen:
+                    LockScreenSettings()
                 case .mirror:
                     MirrorSettings()
                 case .shortcuts:

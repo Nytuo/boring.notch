@@ -16,6 +16,7 @@ import SwiftUI
 struct DynamicNotchApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @Default(.menubarIcon) var showMenuBarIcon
+    @Default(.caffeineEnabled) var caffeineEnabled
     @Environment(\.openWindow) var openWindow
 
     private let sparkleUpdaterDelegate: BoringSparkleUpdaterDelegate
@@ -41,6 +42,9 @@ struct DynamicNotchApp: App {
             }
             .keyboardShortcut(KeyEquivalent(","), modifiers: .command)
             CheckForUpdatesView(updater: updaterController.updater)
+            if caffeineEnabled && Defaults[.caffeineShowInMenuBar] {
+                CaffeineMenuSection()
+            }
             Divider()
             Button("Restart Boring Notch") {
                 ApplicationRelauncher.restart()
@@ -225,8 +229,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let uuid = screen.displayUUID else { return }
         
         let screenFrame = screen.frame
-        let notchHeight = openNotchSize.height
-        let notchWidth = openNotchSize.width
+        // The region a drag has to enter to open the shelf is the footprint of
+        // the opened panel, so it has to track the largest one — not the old
+        // media-player size, which is no longer what any panel measures.
+        let notchHeight = NotchOpenSize.largest.height
+        let notchWidth = NotchOpenSize.largest.width
         
         // Create notch region at the top-center of the screen where an open notch would occupy
         let notchRegion = CGRect(
@@ -246,6 +253,36 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         dragDetectors[uuid] = detector
         detector.startMonitoring()
+    }
+
+    /// Opens the notch on whichever display the pointer is on and switches to
+    /// `view`. Toggles closed again if that view is already showing, so the
+    /// same shortcut dismisses the panel it opened.
+    @MainActor
+    private func openNotch(to view: NotchViews) {
+        var viewModel = vm
+
+        if Defaults[.showOnAllDisplays] {
+            let mouseLocation = NSEvent.mouseLocation
+            for screen in NSScreen.screens where screen.frame.contains(mouseLocation) {
+                if let uuid = screen.displayUUID, let screenViewModel = viewModels[uuid] {
+                    viewModel = screenViewModel
+                    break
+                }
+            }
+        }
+
+        closeNotchTask?.cancel()
+        closeNotchTask = nil
+
+        if viewModel.notchState == .open && coordinator.currentView == view {
+            viewModel.close()
+            return
+        }
+
+        if viewModel.open() {
+            coordinator.currentView = view
+        }
     }
 
     private func handleDragEntersNotchRegion(onScreen screen: NSScreen) {
@@ -313,6 +350,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
 
+        // These managers observe system state from their initialisers, so they
+        // have to be touched explicitly rather than waiting for a view to ask
+        // for them.
+        // Built-in features are registered as extensions; the registry
+        // activates the ones that are switched on.
+        ExtensionRegistry.shared.registerBuiltInExtensions()
+
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(screenConfigurationDidChange),
@@ -366,6 +410,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         })
 
+        // A finished countdown is worth interrupting for: show it on the clock
+        // tab rather than leaving the result behind a closed notch.
+        observers.append(NotificationCenter.default.addObserver(
+            forName: Notification.Name.clockTimerFinished, object: nil, queue: nil
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.vm.notchState == .closed else { return }
+                self.openNotch(to: .clock)
+            }
+        })
+
         // Use closure-based observers for DistributedNotificationCenter and keep tokens for removal
         screenLockedObserver = DistributedNotificationCenter.default().addObserver(
             forName: NSNotification.Name(rawValue: "com.apple.screenIsLocked"),
@@ -400,6 +455,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     type: .music,
                     duration: 3.0
                 )
+            }
+        }
+
+        KeyboardShortcuts.onKeyDown(for: .toggleCaffeine) {
+            Task { @MainActor in
+                guard Defaults[.caffeineEnabled] else { return }
+                CaffeineManager.shared.toggle()
+            }
+        }
+
+        KeyboardShortcuts.onKeyDown(for: .clipboardHistoryPanel) { [weak self] in
+            Task { @MainActor in
+                guard Defaults[.clipboardHistoryEnabled] else { return }
+                self?.openNotch(to: .clipboard)
+            }
+        }
+
+        KeyboardShortcuts.onKeyDown(for: .toggleAppSwitcher) { [weak self] in
+            Task { @MainActor in
+                guard Defaults[.appSwitcherEnabled] else { return }
+                AppSwitcherManager.shared.refresh()
+                self?.openNotch(to: .apps)
             }
         }
 

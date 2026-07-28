@@ -198,7 +198,9 @@ class BoringViewModel: NSObject, ObservableObject {
     func open() -> Bool {
         guard !coordinator.firstLaunch else { return false }
 
-        self.notchSize = openNotchSize
+        // The last-used tab may have been switched off since it was shown.
+        coordinator.fallBackToPlayerIfCurrentViewIsUnavailable()
+        self.notchSize = BoringViewCoordinator.shared.currentView.openSize
         self.notchState = .open
         
         // Force music information update when notch is opened
@@ -222,11 +224,12 @@ class BoringViewModel: NSObject, ObservableObject {
         self.edgeAutoOpenActive = false
 
         // Set the current view to shelf if it contains files and the user enables openShelfByDefault
-        // Otherwise, if the user has not enabled openLastShelfByDefault, set the view to home
+        // Otherwise, if the user has not enabled openLastTabByDefault, go back
+        // to whichever tab they picked as the default in the layout settings.
         if Defaults[.boringShelf] && !ShelfStateViewModel.shared.isEmpty && Defaults[.openShelfByDefault] {
             coordinator.currentView = .shelf
         } else if !coordinator.openLastTabByDefault {
-            coordinator.currentView = .home
+            coordinator.currentView = coordinator.defaultTabView
         }
     }
 

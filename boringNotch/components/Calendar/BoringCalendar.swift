@@ -483,7 +483,8 @@ struct CalendarView: View {
             )
             if filteredEvents.isEmpty {
                 EmptyEventsView(selectedDate: selectedDate)
-                    .frame(maxHeight: .infinity, alignment: .center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 18)
             } else {
                 EventListView(events: calendarManager.events)
             }
@@ -654,7 +655,19 @@ struct EventListView: View {
                 scrollToRelevantEvent(proxy: proxy)
             }
         }
-        Spacer(minLength: 0)
+        // A `List` is greedy, and the trailing spacer that used to sit here was
+        // greedier still, so the calendar filled the whole envelope whether it
+        // had one event or twenty. Sized to its rows instead, capped before it
+        // outgrows the panel.
+        .frame(height: listHeight)
+    }
+
+    private static let rowHeight: CGFloat = 44
+    private static let maxVisibleRows = 5
+
+    private var listHeight: CGFloat {
+        let rows = min(max(filteredEvents.count, 1), Self.maxVisibleRows)
+        return CGFloat(rows) * Self.rowHeight
     }
 
     private func eventRow(_ event: EventModel) -> some View {

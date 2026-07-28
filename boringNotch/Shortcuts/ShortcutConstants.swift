@@ -15,4 +15,6 @@ extension KeyboardShortcuts.Name {
     static let increaseBacklight = Self("increaseBacklight", default: .init(.f2, modifiers: [.command]))
     static let toggleSneakPeek = Self("toggleSneakPeek", default: .init(.h, modifiers: [.command, .shift]))
     static let toggleNotchOpen = Self("toggleNotchOpen", default: .init(.i, modifiers: [.command, .shift]))
+    static let toggleCaffeine = Self("toggleCaffeine", default: .init(.k, modifiers: [.command, .shift]))
+    static let toggleAppSwitcher = Self("toggleAppSwitcher", default: .init(.a, modifiers: [.command, .shift]))
 }

@@ -112,20 +112,20 @@ brew install --cask TheBoredTeam/boring-notch/boring-notch
 - [x] Shelf functionality with AirDrop 📚
 - [x] Notch sizing customization, finetuning on different display sizes 🖥️
 - [x] System OSD replacements (volume, brightness, backlight) 🎚️💡⌨️
-- [ ] Bluetooth Live Activity (connect/disconnect for bluetooth devices) 
-- [ ] Weather integration ⛅️
-- [ ] Customizable Layout options 🛠️
-- [ ] Lock Screen Widgets 🔒
-- [ ] Extension system 🧩
-- [ ] Notifications (under consideration) 🔔
-<!-- - [ ] Clipboard history manager 📌 `Extension` -->
-<!-- - [ ] Download indicator of different browsers (Safari, Chromium browsers, Firefox) 🌍 `Extension`-->
-<!-- - [ ] Customizable function buttons 🎛️ -->
-<!-- - [ ] App switcher 🪄 -->
-
-<!-- ## 🧩 Extensions
-> [!NOTE]
-> We’re hard at work on some awesome extensions! Stay tuned, and we’ll keep you updated as soon as they’re released. -->
+- [x] Bluetooth Live Activity (connect/disconnect for bluetooth devices) 
+- [x] Weather integration ⛅️
+- [x] Customizable Layout options 🛠️
+- [x] Lock Screen Notch 🔒
+- [x] Notifications 🔔
+- [x] Keep Awake with timer ☕️
+- [x] Clipboard history manager 📌
+- [x] Download indicator of different browsers (Safari, Chromium browsers, Firefox) 🌍
+- [x] Customizable function buttons 🎛️
+- [x] App switcher 🪄
+- [x] Clock, countdown timer and stopwatch ⏱️
+- [x] Screenshot catcher with copy, shelf, reveal and delete 📸
+- [x] System stats (CPU, memory, network) with graphs 📈
+- [x] Bluetooth accessory battery levels 🔋
 
 ## Building from Source
 
