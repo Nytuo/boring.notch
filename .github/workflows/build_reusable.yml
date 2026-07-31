@@ -21,11 +21,11 @@ on:
         default: "Apple Development"
     secrets:
       BUILD_CERTIFICATE_BASE64:
-        required: true
+        required: false
       P12_PASSWORD:
-        required: true
+        required: false
       KEYCHAIN_PASSWORD:
-        required: true
+        required: false
 
 jobs:
   build:
@@ -40,6 +40,7 @@ jobs:
       DEVELOPMENT_TEAM: ${{ vars.DEVELOPMENT_TEAM_ID }}
       CODE_SIGN_IDENTITY: ${{ inputs.code_sign_identity }}
       XCODE_VERSION: ${{ inputs.xcode_version }}
+      BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -49,8 +50,8 @@ jobs:
         run: xcodebuild -resolvePackageDependencies -project ${{ env.PROJECT_NAME }}.xcodeproj
 
       - name: Install Apple certificate
+        if: env.BUILD_CERTIFICATE_BASE64 != ''
         env:
-          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
@@ -112,15 +113,29 @@ jobs:
 
       - name: Build and archive
         run: |
-          xcodebuild clean archive \
-            -project ${{ env.PROJECT_NAME }}.xcodeproj \
-            -scheme ${{ env.PROJECT_NAME }} \
-            -archivePath ${{ env.PROJECT_NAME }} \
-            -destination "generic/platform=macOS" \
-            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
-            CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
-            ONLY_ACTIVE_ARCH=NO \
-            -allowProvisioningUpdates
+          if [[ -z "$BUILD_CERTIFICATE_BASE64" ]]; then
+            # No certificate: build without code signing
+            xcodebuild clean archive \
+              -project ${{ env.PROJECT_NAME }}.xcodeproj \
+              -scheme ${{ env.PROJECT_NAME }} \
+              -archivePath ${{ env.PROJECT_NAME }} \
+              -destination "generic/platform=macOS" \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              ONLY_ACTIVE_ARCH=NO
+          else
+            # Certificate available: build with signing
+            xcodebuild clean archive \
+              -project ${{ env.PROJECT_NAME }}.xcodeproj \
+              -scheme ${{ env.PROJECT_NAME }} \
+              -archivePath ${{ env.PROJECT_NAME }} \
+              -destination "generic/platform=macOS" \
+              DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+              CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
+              ONLY_ACTIVE_ARCH=NO \
+              -allowProvisioningUpdates
+          fi
 
       - name: Export app
         run: |
