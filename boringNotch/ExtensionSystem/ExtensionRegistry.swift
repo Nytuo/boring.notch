@@ -52,6 +52,11 @@ final class ExtensionRegistry: ObservableObject {
         register(SystemStatsExtension())
         register(AppSwitcherExtension())
         register(NotificationsExtension())
+        register(VPNStatusExtension())
+        register(MeetingExtension())
+        register(AgentProgressExtension())
+        register(VoiceRecorderExtension())
+        register(MotionArtExtension())
     }
 
     // MARK: Lookup

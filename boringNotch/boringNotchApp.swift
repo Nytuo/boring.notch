@@ -88,6 +88,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowScreenDidChangeObserver: Any?
     private var dragDetectors: [String: DragDetector] = [:] // UUID -> DragDetector
     private var observers: [Any] = []
+    private let catcherPresenter = CatcherPresenter()
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
@@ -244,15 +245,44 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
         
         let detector = DragDetector(notchRegion: notchRegion)
-        
+
         detector.onDragEntersNotchRegion = { [weak self] in
             Task { @MainActor in
                 self?.handleDragEntersNotchRegion(onScreen: screen)
             }
         }
-        
+
+        // F-10: Catcher rides the same drag session this detector already
+        // tracks, so it shares its on/off state with expandedDragDetection
+        // rather than adding a second set of global monitors.
+        detector.onDragMove = { [weak self] point in
+            Task { @MainActor in
+                self?.catcherPresenter.recordDragPosition(point, on: screen)
+            }
+        }
+        detector.onDragEnd = { [weak self] in
+            Task { @MainActor in
+                self?.catcherPresenter.dragDidEnd()
+            }
+        }
+
         dragDetectors[uuid] = detector
         detector.startMonitoring()
+    }
+
+    /// Closes the notch on `screen` if it is still showing the shelf —
+    /// F-10's auto-close, a no-op if the user has since switched tabs or
+    /// opened it some other way.
+    @MainActor
+    private func autoCloseShelfIfShowing(on screen: NSScreen) {
+        guard coordinator.currentView == .shelf else { return }
+        guard let uuid = screen.displayUUID else { return }
+
+        if Defaults[.showOnAllDisplays], let viewModel = viewModels[uuid], viewModel.notchState == .open {
+            viewModel.close()
+        } else if !Defaults[.showOnAllDisplays], let windowScreen = window?.screen, screen == windowScreen, vm.notchState == .open {
+            vm.close()
+        }
     }
 
     /// Opens the notch on whichever display the pointer is on and switches to
@@ -357,6 +387,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // activates the ones that are switched on.
         ExtensionRegistry.shared.registerBuiltInExtensions()
 
+        _ = KeystrokeSoundManager.shared
+
+        catcherPresenter.onCatch = { [weak self] screen in
+            self?.handleDragEntersNotchRegion(onScreen: screen)
+        }
+        catcherPresenter.onAutoClose = { [weak self] screen in
+            self?.autoCloseShelfIfShowing(on: screen)
+        }
+
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(screenConfigurationDidChange),
@@ -455,6 +494,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     type: .music,
                     duration: 3.0
                 )
+            }
+        }
+
+        for (name, zone) in [
+            (KeyboardShortcuts.Name.snapWindowLeftHalf, WindowSnapZone.leftHalf),
+            (.snapWindowRightHalf, .rightHalf),
+            (.snapWindowTopHalf, .topHalf),
+            (.snapWindowBottomHalf, .bottomHalf),
+            (.snapWindowTopLeftQuarter, .topLeftQuarter),
+            (.snapWindowTopRightQuarter, .topRightQuarter),
+            (.snapWindowBottomLeftQuarter, .bottomLeftQuarter),
+            (.snapWindowBottomRightQuarter, .bottomRightQuarter),
+            (.snapWindowMaximize, .maximize),
+            (.snapWindowCenter, .center)
+        ] {
+            KeyboardShortcuts.onKeyDown(for: name) {
+                Task { @MainActor in
+                    WindowSnapManager.shared.snap(to: zone)
+                }
+            }
+        }
+        KeyboardShortcuts.onKeyDown(for: .snapWindowRestore) {
+            Task { @MainActor in
+                WindowSnapManager.shared.restore()
+            }
+        }
+
+        KeyboardShortcuts.onKeyDown(for: .toggleLauncher) { [weak self] in
+            Task { @MainActor in
+                guard Defaults[.launcherEnabled] else { return }
+                self?.openNotch(to: .launcher)
             }
         }
 

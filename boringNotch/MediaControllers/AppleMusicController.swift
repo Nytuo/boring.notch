@@ -28,6 +28,15 @@ class AppleMusicController: MediaControllerProtocol {
         return true
     }
 
+    var supportsQueue: Bool {
+        return true
+    }
+
+    /// Maps each `queue()` result's array index to its absolute track index
+    /// in `current playlist`, for `playItem(at:)`. Stale once playback moves
+    /// on, same as any "up next" list would be.
+    private var lastQueuePlaylistIndices: [Int] = []
+
     private var notificationTask: Task<Void, Never>?
     
     // MARK: - Initialization
@@ -151,8 +160,77 @@ class AppleMusicController: MediaControllerProtocol {
         self.playbackState = updatedState
     }
     
+    /// Approximates "up next" from the remaining tracks in `current
+    /// playlist`. Returns `nil` when that concept doesn't apply right now —
+    /// a radio station or Apple Music streaming without a backing playlist
+    /// has no `current playlist` at all, and the script's own `try` block
+    /// falls through to an empty result in that case rather than throwing.
+    func queue() async -> [QueueItem]? {
+        guard let descriptor = try? await fetchQueueAsync(),
+              descriptor.numberOfItems >= 3,
+              let namesList = descriptor.atIndex(1),
+              let artistsList = descriptor.atIndex(2),
+              let indicesList = descriptor.atIndex(3)
+        else { return nil }
+
+        let count = namesList.numberOfItems
+        guard count > 0 else { return nil }
+
+        var items: [QueueItem] = []
+        var indices: [Int] = []
+        for i in 1...count {
+            let name = namesList.atIndex(i)?.stringValue ?? ""
+            guard !name.isEmpty else { continue }
+            let artist = artistsList.atIndex(i)?.stringValue
+            let playlistIndex = Int(indicesList.atIndex(i)?.int32Value ?? 0)
+            items.append(QueueItem(title: name, artist: artist))
+            indices.append(playlistIndex)
+        }
+
+        guard !items.isEmpty else { return nil }
+        lastQueuePlaylistIndices = indices
+        return items
+    }
+
+    func playItem(at index: Int) async {
+        guard index >= 0, index < lastQueuePlaylistIndices.count else { return }
+        let playlistIndex = lastQueuePlaylistIndices[index]
+        await executeCommand("play track \(playlistIndex) of current playlist")
+        await updatePlaybackInfo()
+    }
+
+    private func fetchQueueAsync() async throws -> NSAppleEventDescriptor? {
+        let script = """
+        tell application "Music"
+            try
+                set currentIndex to (index of current track)
+                set thePlaylist to current playlist
+                set totalTracks to count of tracks of thePlaylist
+                set upcomingNames to {}
+                set upcomingArtists to {}
+                set upcomingIndices to {}
+                set maxItems to 15
+                set endIndex to currentIndex + maxItems
+                if endIndex > totalTracks then set endIndex to totalTracks
+                if endIndex >= (currentIndex + 1) then
+                    repeat with i from (currentIndex + 1) to endIndex
+                        set t to track i of thePlaylist
+                        set end of upcomingNames to (name of t)
+                        set end of upcomingArtists to (artist of t)
+                        set end of upcomingIndices to i
+                    end repeat
+                end if
+                return {upcomingNames, upcomingArtists, upcomingIndices}
+            on error
+                return {{}, {}, {}}
+            end try
+        end tell
+        """
+        return try await AppleScriptHelper.execute(script)
+    }
+
     // MARK: - Private Methods
-    
+
     private func executeCommand(_ command: String) async {
         let script = "tell application \"Music\" to \(command)"
         try? await AppleScriptHelper.executeVoid(script)

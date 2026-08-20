@@ -28,6 +28,8 @@ public enum NotchViews {
     case clock
     case systemStats
     case bluetooth
+    case board
+    case launcher
 
     /// Largest opened-notch envelope this view may use.
     ///
@@ -37,7 +39,7 @@ public enum NotchViews {
         switch self {
         case .player, .shelf, .clock:
             return NotchOpenSize.standard
-        case .calendar, .weather, .clipboard, .apps, .systemStats, .bluetooth:
+        case .calendar, .weather, .clipboard, .apps, .systemStats, .bluetooth, .board, .launcher:
             return NotchOpenSize.wide
         }
     }
@@ -51,10 +53,14 @@ public enum NotchViews {
         switch self {
         case .player, .shelf, .clock:
             return false
-        case .calendar, .weather, .clipboard, .apps, .bluetooth:
+        case .calendar, .weather, .clipboard, .apps, .bluetooth, .launcher:
             return true
         case .systemStats:
             // The graphs want the whole envelope; hugging would collapse them.
+            return false
+        case .board:
+            // A user-composed list of widgets should get the whole envelope
+            // to lay out in, same reasoning as system stats.
             return false
         }
     }

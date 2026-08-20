@@ -14,6 +14,22 @@ protocol CalendarServiceProviding {
     func requestAccess(to type: EKEntityType) async throws -> Bool
     func calendars() async -> [CalendarModel]
     func events(from start: Date, to end: Date, calendars: [String]) async -> [EventModel]
+    /// F-50: creates an event on the system's default calendar for new
+    /// events. No calendar picker in the quick-add flow — matches the
+    /// "type and go" quick-entry pattern rather than adding a decision the
+    /// natural-language entry is meant to avoid.
+    func createEvent(title: String, start: Date, end: Date, isAllDay: Bool) async throws
+}
+
+enum CalendarServiceError: LocalizedError {
+    case notAuthorized
+
+    var errorDescription: String? {
+        switch self {
+        case .notAuthorized:
+            return NSLocalizedString("calendar_quickadd_not_authorized", comment: "Calendar write access not granted")
+        }
+    }
 }
 
 class CalendarService: CalendarServiceProviding {
@@ -105,6 +121,19 @@ class CalendarService: CalendarServiceProviding {
         }
     }
     
+    func createEvent(title: String, start: Date, end: Date, isAllDay: Bool) async throws {
+        guard hasAccess(to: .event) else { throw CalendarServiceError.notAuthorized }
+
+        let event = EKEvent(eventStore: store)
+        event.title = title
+        event.startDate = start
+        event.endDate = end
+        event.isAllDay = isAllDay
+        event.calendar = store.defaultCalendarForNewEvents
+
+        try store.save(event, span: .thisEvent, commit: true)
+    }
+
     func setReminderCompleted(reminderID: String, completed: Bool) async {
         guard let reminder = store.calendarItem(withIdentifier: reminderID) as? EKReminder else { return }
         reminder.isCompleted = completed

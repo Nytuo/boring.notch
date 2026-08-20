@@ -17,6 +17,7 @@ enum ClockMode: String, CaseIterable, Identifiable, Codable, Defaults.Serializab
     case clock
     case timer
     case stopwatch
+    case pomodoro
 
     var id: String { rawValue }
 
@@ -25,6 +26,7 @@ enum ClockMode: String, CaseIterable, Identifiable, Codable, Defaults.Serializab
         case .clock: return NSLocalizedString("clock_mode_clock", comment: "Clock tab mode: clock")
         case .timer: return NSLocalizedString("clock_mode_timer", comment: "Clock tab mode: timer")
         case .stopwatch: return NSLocalizedString("clock_mode_stopwatch", comment: "Clock tab mode: stopwatch")
+        case .pomodoro: return NSLocalizedString("clock_mode_pomodoro", comment: "Clock tab mode: Pomodoro")
         }
     }
 
@@ -33,6 +35,7 @@ enum ClockMode: String, CaseIterable, Identifiable, Codable, Defaults.Serializab
         case .clock: return "clock"
         case .timer: return "timer"
         case .stopwatch: return "stopwatch"
+        case .pomodoro: return "brain.head.profile"
         }
     }
 }

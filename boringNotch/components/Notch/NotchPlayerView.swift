@@ -298,6 +298,10 @@ struct MusicControlsView: View {
             HoverButton(icon: "goforward.15", scale: .medium) {
                 MusicManager.shared.skip(seconds: 15)
             }
+        case .queue:
+            QueueControlButton()
+        case .audioOutput:
+            AudioOutputControlButton()
         case .none:
             Color.clear.frame(height: 1)
         }
@@ -341,6 +345,35 @@ struct FavoriteControlButton: View {
 
     private var iconColor: Color {
         musicManager.isFavoriteTrack ? .red : .primary
+    }
+}
+
+struct QueueControlButton: View {
+    @ObservedObject var musicManager = MusicManager.shared
+    @State private var showPopover = false
+
+    var body: some View {
+        HoverButton(icon: "list.bullet", scale: .medium) {
+            showPopover = true
+        }
+        .disabled(!musicManager.queueSupported)
+        .opacity(musicManager.queueSupported ? 1 : 0.35)
+        .popover(isPresented: $showPopover, arrowEdge: .top) {
+            QueuePopoverView()
+        }
+    }
+}
+
+struct AudioOutputControlButton: View {
+    @State private var showPopover = false
+
+    var body: some View {
+        HoverButton(icon: "hifispeaker.fill", scale: .medium) {
+            showPopover = true
+        }
+        .popover(isPresented: $showPopover, arrowEdge: .top) {
+            AudioOutputPickerView()
+        }
     }
 }
 

@@ -136,6 +136,9 @@ struct BoringHeader: View {
                 maxAdapterWatts: batteryModel.maxAdapterWatts,
                 isForNotification: false
             )
+
+        case .vpn:
+            VPNHeaderIndicator()
         }
     }
 

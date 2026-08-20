@@ -22,6 +22,10 @@ enum SneakContentType {
     case bluetooth
     case notification
     case screenshot
+    case vpn
+    case meeting
+    case agentProgress
+    case voiceRecording
 }
 
 struct sneakPeek {

@@ -193,6 +193,24 @@ class CalendarManager: ObservableObject {
         self.events = eventsResult
     }
     
+    /// F-50: creates an event from a parsed quick-add draft, then refreshes
+    /// `events` the same way `setReminderCompleted` does after its write.
+    @discardableResult
+    func createEvent(from draft: ParsedEventDraft) async -> Bool {
+        do {
+            try await calendarService.createEvent(
+                title: draft.title,
+                start: draft.start,
+                end: draft.end,
+                isAllDay: draft.isAllDay
+            )
+            await updateEvents()
+            return true
+        } catch {
+            return false
+        }
+    }
+
     func setReminderCompleted(reminderID: String, completed: Bool) async {
         await calendarService.setReminderCompleted(reminderID: reminderID, completed: completed)
         // Refresh events after updating

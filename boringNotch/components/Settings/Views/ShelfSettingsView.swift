@@ -37,6 +37,10 @@ struct Shelf: View {
                         object: nil
                     )
                 }
+                Defaults.Toggle(key: .catcherEnabled) {
+                    Text("Shake to open the shelf")
+                }
+                .disabled(!expandedDragDetection)
                 Defaults.Toggle(key: .copyOnDrag) {
                     Text("Copy items on drag")
                 }

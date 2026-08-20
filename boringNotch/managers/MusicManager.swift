@@ -50,6 +50,8 @@ class MusicManager: ObservableObject {
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @Published var usingAppIconForArtwork: Bool = false
     @Published var canFavoriteTrack: Bool = false
+    /// F-20: whether the active controller can return a real "up next" list.
+    @Published var queueSupported: Bool = false
     
     // Lyrics are now managed by LyricsService
     var lyricsService: LyricsService { LyricsService.shared }
@@ -177,6 +179,7 @@ class MusicManager: ObservableObject {
         activeController = controller
         
         self.canFavoriteTrack = controller.supportsFavorite
+        self.queueSupported = controller.supportsQueue
 
         // Get current state from active controller
         forceUpdate()
@@ -516,6 +519,21 @@ class MusicManager: ObservableObject {
             Task {
                 await controller.setVolume(level)
             }
+        }
+    }
+
+    /// F-20: upcoming tracks from the active controller, or `nil` if it
+    /// doesn't support the concept right now — check `queueSupported` first
+    /// to avoid offering the UI at all when it never will.
+    func queue() async -> [QueueItem]? {
+        await activeController?.queue()
+    }
+
+    /// Jumps to the item at `index` in the array the last `queue()` call
+    /// returned.
+    func playQueueItem(at index: Int) {
+        Task {
+            await activeController?.playItem(at: index)
         }
     }
     func openMusicApp() {

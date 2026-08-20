@@ -30,6 +30,23 @@ enum FunctionButtonAction: Codable, Hashable {
     case toggleCaffeine
     /// Toggle microphone mute.
     case toggleMicrophone
+    /// Switch to the next enumerated CoreAudio output device (F-21). Not
+    /// AirPlay — targets there aren't publicly enumerable, so cycling can
+    /// only cover devices the system actually lists.
+    case cycleAudioOutput
+    /// Toggles Low Power Mode. Routes through the XPC helper's `power`
+    /// capability (F-23) — a no-op while that capability is off in Advanced
+    /// settings, same as every other privileged action in this app.
+    case toggleLowPowerMode
+    /// Opens the system Character Viewer (F-15). Uses macOS's own picker
+    /// rather than a custom in-notch grid backed by bundled CLDR data — the
+    /// system one already has categories, keyword search, skin tones and
+    /// frecency recents, maintained by Apple, with no licence to track and
+    /// no dataset to keep in sync. The tradeoff is it opens as its own
+    /// floating panel rather than rendering inside the notch.
+    case openEmojiPicker
+    /// Starts/stops a voice note (F-40). No-op while the feature is off.
+    case toggleVoiceRecording
 
     var iconName: String {
         switch self {
@@ -40,6 +57,10 @@ enum FunctionButtonAction: Codable, Hashable {
         case .openTab(let tab): return tab.iconName
         case .toggleCaffeine: return "cup.and.saucer"
         case .toggleMicrophone: return "mic.slash"
+        case .cycleAudioOutput: return "hifispeaker.fill"
+        case .toggleLowPowerMode: return "leaf"
+        case .openEmojiPicker: return "face.smiling"
+        case .toggleVoiceRecording: return "mic.circle.fill"
         }
     }
 
@@ -59,6 +80,14 @@ enum FunctionButtonAction: Codable, Hashable {
             return NSLocalizedString("function_action_caffeine", comment: "Function button: toggle Keep Awake")
         case .toggleMicrophone:
             return NSLocalizedString("function_action_microphone", comment: "Function button: toggle microphone")
+        case .cycleAudioOutput:
+            return NSLocalizedString("function_action_audio_output", comment: "Function button: cycle audio output device")
+        case .toggleLowPowerMode:
+            return NSLocalizedString("function_action_low_power", comment: "Function button: toggle Low Power Mode")
+        case .openEmojiPicker:
+            return NSLocalizedString("function_action_emoji", comment: "Function button: open the emoji picker")
+        case .toggleVoiceRecording:
+            return NSLocalizedString("function_action_voice_recording", comment: "Function button: start/stop a voice note")
         }
     }
 }
@@ -134,6 +163,21 @@ enum FunctionButtonRunner {
                 type: .mic,
                 value: coordinator.currentMicStatus ? 0 : 1
             )
+
+        case .cycleAudioOutput:
+            AudioOutputManager.shared.cycleToNextDevice()
+
+        case .toggleLowPowerMode:
+            let target = !ProcessInfo.processInfo.isLowPowerModeEnabled
+            Task {
+                _ = await XPCHelperClient.shared.setLowPowerMode(target)
+            }
+
+        case .openEmojiPicker:
+            NSApp.orderFrontCharacterPalette(nil)
+
+        case .toggleVoiceRecording:
+            VoiceRecorderManager.shared.toggleRecording()
         }
     }
 

@@ -468,6 +468,7 @@ struct CalendarView: View {
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject private var calendarManager = CalendarManager.shared
     @State private var selectedDate = Date()
+    @State private var showQuickAdd = false
     @Default(.calendarWeekView) private var calendarWeekView
 
     var body: some View {
@@ -508,6 +509,20 @@ struct CalendarView: View {
         }
     }
 
+    /// F-50: opens the natural-language quick-add popover.
+    private var quickAddButton: some View {
+        Button {
+            showQuickAdd = true
+        } label: {
+            Image(systemName: "plus.circle")
+                .foregroundStyle(Color.effectiveAccent)
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showQuickAdd, arrowEdge: .bottom) {
+            QuickAddEventView(isPresented: $showQuickAdd)
+        }
+    }
+
     /// Week-aligned layout: a month/year header above a fixed, full-width week strip.
     private var weekHeader: some View {
         VStack(spacing: 4) {
@@ -521,6 +536,7 @@ struct CalendarView: View {
                     .fontWeight(.light)
                     .foregroundColor(Color(white: 0.65))
                 Spacer()
+                quickAddButton
             }
             .padding(.horizontal, 4)
 
@@ -541,6 +557,7 @@ struct CalendarView: View {
                     .font(.title3)
                     .fontWeight(.light)
                     .foregroundColor(Color(white: 0.65))
+                quickAddButton
             }
 
             ZStack(alignment: .top) {

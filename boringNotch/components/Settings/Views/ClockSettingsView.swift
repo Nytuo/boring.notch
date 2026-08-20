@@ -10,6 +10,11 @@ struct ClockSettings: View {
     @Default(.clockEnabled) private var enabled
     @Default(.clockFollowSystemFormat) private var followSystemFormat
     @Default(.clockDefaultTimerMinutes) private var defaultTimerMinutes
+    @Default(.clockPomodoroWorkMinutes) private var pomodoroWorkMinutes
+    @Default(.clockPomodoroShortBreakMinutes) private var pomodoroShortBreakMinutes
+    @Default(.clockPomodoroLongBreakMinutes) private var pomodoroLongBreakMinutes
+    @Default(.clockPomodoroCyclesBeforeLongBreak) private var pomodoroCyclesBeforeLongBreak
+    @Default(.clockPomodoroCompletedSessions) private var pomodoroCompletedSessions
 
     var body: some View {
         Form {
@@ -75,6 +80,64 @@ struct ClockSettings: View {
                 .disabled(!enabled)
             } header: {
                 Text("Timer")
+            }
+
+            Section {
+                Stepper(value: $pomodoroWorkMinutes, in: 1...120) {
+                    HStack {
+                        Text("Work session")
+                        Spacer()
+                        Text("\(pomodoroWorkMinutes) min")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(!enabled)
+
+                Stepper(value: $pomodoroShortBreakMinutes, in: 1...60) {
+                    HStack {
+                        Text("Short break")
+                        Spacer()
+                        Text("\(pomodoroShortBreakMinutes) min")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(!enabled)
+
+                Stepper(value: $pomodoroLongBreakMinutes, in: 1...120) {
+                    HStack {
+                        Text("Long break")
+                        Spacer()
+                        Text("\(pomodoroLongBreakMinutes) min")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(!enabled)
+
+                Stepper(value: $pomodoroCyclesBeforeLongBreak, in: 1...12) {
+                    HStack {
+                        Text("Work sessions before a long break")
+                        Spacer()
+                        Text("\(pomodoroCyclesBeforeLongBreak)")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(!enabled)
+
+                Defaults.Toggle(key: .clockPomodoroAutoAdvance) {
+                    Text("Start the next phase automatically")
+                }
+                .disabled(!enabled)
+
+                HStack {
+                    Text("Work sessions completed")
+                    Spacer()
+                    Text("\(pomodoroCompletedSessions)")
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Pomodoro")
+            } footer: {
+                HelpText("A work/break cycle built on the timer above. Runs as its own mode in the clock tab.")
             }
         }
         .accentColor(.effectiveAccent)

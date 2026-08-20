@@ -51,15 +51,59 @@ struct NotificationLiveActivity: View {
                     .fill(.black)
                     .frame(width: vm.closedNotchSize.width + 2 * liveActivityEdgeMargin)
 
-                HStack {
+                HStack(spacing: 6) {
                     Text(notification.receivedAt, style: .time)
                         .font(.caption2.monospacedDigit())
                         .foregroundStyle(.gray)
+                    if watcher.canReply(to: notification.id) {
+                        NotificationReplyButton(notificationID: notification.id)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, 10)
             }
             .frame(height: closedNotchHeight, alignment: .center)
         }
+    }
+}
+
+/// F-31: reply affordance, shown only while `NotificationWatcher` still has
+/// the banner's AX element retained (see that class's "Reply" section for
+/// why this is best-effort and unverified against a live banner).
+private struct NotificationReplyButton: View {
+    let notificationID: UUID
+
+    @State private var showReply = false
+    @State private var text = ""
+
+    var body: some View {
+        Button {
+            showReply = true
+        } label: {
+            Image(systemName: "arrowshape.turn.up.left.fill")
+                .font(.caption2)
+                .foregroundStyle(Color.effectiveAccent)
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showReply, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 8) {
+                TextField(NSLocalizedString("notification_reply_placeholder", comment: "Placeholder for the notification reply field"), text: $text)
+                    .textFieldStyle(.plain)
+                    .onSubmit(send)
+                Button(NSLocalizedString("notification_reply_send", comment: "Send a notification reply")) {
+                    send()
+                }
+                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(10)
+            .frame(width: 240)
+        }
+    }
+
+    private func send() {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        NotificationWatcher.shared.reply(to: notificationID, text: text)
+        text = ""
+        showReply = false
     }
 }

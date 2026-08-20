@@ -201,6 +201,33 @@ final class ShelfItemViewModel: ObservableObject {
         }
     }
     
+    /// F-51: local-network share — a QR code and URL for one file, served
+    /// from this Mac over the LAN, no account. Single file only, unlike
+    /// `shareItem(from:)` which can hand the system picker several at once.
+    func shareViaLocalNetwork(from view: NSView?) {
+        guard let selectedItem = ShelfSelectionModel.shared.selectedItems(in: ShelfStateViewModel.shared.items).first,
+              case .file = selectedItem.kind,
+              let fileURL = ShelfStateViewModel.shared.resolveAndUpdateBookmark(for: selectedItem)
+        else { return }
+
+        Task {
+            guard await LocalShareServer.shared.startSharing(fileURL: fileURL) != nil else {
+                let alert = NSAlert()
+                alert.messageText = "Local Share Failed"
+                alert.informativeText = "Could not start the local network server. Check that you're connected to Wi-Fi or Ethernet."
+                alert.alertStyle = .warning
+                alert.runModal()
+                return
+            }
+
+            guard let view else { return }
+            let popover = NSPopover()
+            popover.behavior = .transient
+            popover.contentViewController = NSHostingController(rootView: ShareLinkView())
+            popover.show(relativeTo: .zero, of: view, preferredEdge: .minY)
+        }
+    }
+
     private func stopSharingAccessingURLs() {
         for url in sharingAccessingURLs {
             url.stopAccessingSecurityScopedResource()
@@ -354,6 +381,9 @@ final class ShelfItemViewModel: ObservableObject {
 
         menu.addItem(NSMenuItem.separator())
         addMenuItem(title: "Share…")
+        if selectedFileURLs.count == 1 {
+            addMenuItem(title: "Share via Local Network…")
+        }
         
         // Add image processing options for image files grouped under "Image Actions"
         let imageURLs = selectedFileURLs.filter { ImageProcessingService.shared.isImageFile($0) }
@@ -381,6 +411,15 @@ final class ShelfItemViewModel: ObservableObject {
 
             imageActions.submenu = imageSubmenu
             menu.addItem(imageActions)
+            menu.addItem(NSMenuItem.separator())
+        }
+
+        // Convert Media — single audio/video file only, mirroring the image
+        // conversion entry above.
+        let mediaURLs = selectedFileURLs.filter { AVConversionService.shared.isAudioOrVideoFile($0) }
+        if mediaURLs.count == 1 {
+            let convertMediaItem = NSMenuItem(title: "Convert Media…", action: nil, keyEquivalent: "")
+            menu.addItem(convertMediaItem)
             menu.addItem(NSMenuItem.separator())
         }
 
@@ -513,6 +552,9 @@ final class ShelfItemViewModel: ObservableObject {
             case "Share…":
                 viewModel?.shareItem(from: view)
 
+            case "Share via Local Network…":
+                viewModel?.shareViaLocalNetwork(from: view)
+
             case "Rename":
                 let selected = ShelfSelectionModel.shared.selectedItems(in: ShelfStateViewModel.shared.items)
                 if selected.count == 1, let single = selected.first { showRenameDialog(for: single) }
@@ -584,6 +626,9 @@ final class ShelfItemViewModel: ObservableObject {
                 
             case "Convert Image…":
                 showConvertImageDialog()
+
+            case "Convert Media…":
+                showConvertMediaDialog()
                 
             case "Create PDF":
                 handleCreatePDF()
@@ -1088,6 +1133,89 @@ final class ShelfItemViewModel: ObservableObject {
         }
         
         @MainActor
+        private func showConvertMediaDialog() {
+            let selected = ShelfSelectionModel.shared.selectedItems(in: ShelfStateViewModel.shared.items)
+            let mediaURLs = selected.compactMap { $0.fileURL }.filter { AVConversionService.shared.isAudioOrVideoFile($0) }
+
+            guard let mediaURL = mediaURLs.first else { return }
+            let isVideo = AVConversionService.shared.isVideoFile(mediaURL)
+
+            let alert = NSAlert()
+            alert.messageText = "Convert Media"
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "Convert")
+            alert.addButton(withTitle: "Cancel")
+
+            let accessoryView = NSView(frame: NSRect(x: 0, y: 0, width: 340, height: 80))
+
+            let formatLabel = NSTextField(labelWithString: "Format:")
+            formatLabel.frame = NSRect(x: 0, y: 45, width: 100, height: 20)
+            formatLabel.font = .systemFont(ofSize: 12, weight: .medium)
+            accessoryView.addSubview(formatLabel)
+
+            let formatOptions: [MediaConversionOptions.OutputFormat] = isVideo ? [.mp4, .mov, .m4a] : [.m4a]
+            let formatPopup = NSPopUpButton(frame: NSRect(x: 100, y: 40, width: 220, height: 28))
+            formatPopup.addItems(withTitles: formatOptions.map { $0.rawValue.uppercased() })
+            formatPopup.font = .systemFont(ofSize: 12)
+            accessoryView.addSubview(formatPopup)
+
+            let qualityLabel = NSTextField(labelWithString: "Quality:")
+            qualityLabel.frame = NSRect(x: 0, y: 10, width: 100, height: 20)
+            qualityLabel.font = .systemFont(ofSize: 12, weight: .medium)
+            accessoryView.addSubview(qualityLabel)
+
+            let qualityPopup = NSPopUpButton(frame: NSRect(x: 100, y: 5, width: 220, height: 28))
+            qualityPopup.font = .systemFont(ofSize: 12)
+            accessoryView.addSubview(qualityPopup)
+
+            func refreshQualityOptions() {
+                let format = formatOptions[safe: formatPopup.indexOfSelectedItem] ?? formatOptions[0]
+                let qualities = format.isAudioOnly ? MediaConversionOptions.audioQualities : MediaConversionOptions.videoQualities
+                qualityPopup.removeAllItems()
+                qualityPopup.addItems(withTitles: qualities.map(\.label))
+            }
+            refreshQualityOptions()
+
+            class FormatChangeHandler: NSObject {
+                let onChange: () -> Void
+                init(onChange: @escaping () -> Void) { self.onChange = onChange }
+                @objc func changed() { onChange() }
+            }
+            let formatChangeHandler = FormatChangeHandler(onChange: refreshQualityOptions)
+            formatPopup.target = formatChangeHandler
+            formatPopup.action = #selector(FormatChangeHandler.changed)
+            MenuActionTarget.sliderHandlerAssoc[accessoryView] = formatChangeHandler
+
+            alert.accessoryView = accessoryView
+
+            let response = alert.runModal()
+            guard response == .alertFirstButtonReturn else { return }
+
+            let format = formatOptions[safe: formatPopup.indexOfSelectedItem] ?? formatOptions[0]
+            let qualities = format.isAudioOnly ? MediaConversionOptions.audioQualities : MediaConversionOptions.videoQualities
+            let quality = qualities[safe: qualityPopup.indexOfSelectedItem] ?? qualities[0]
+            let options = MediaConversionOptions(format: format, preset: quality.preset)
+
+            Task {
+                do {
+                    let resultURL = try await mediaURL.accessSecurityScopedResource { url in
+                        try await AVConversionService.shared.convertMedia(from: url, options: options)
+                    }
+
+                    if let resultURL {
+                        if let bookmark = try? Bookmark(url: resultURL) {
+                            let newItem = ShelfItem(kind: .file(bookmark: bookmark.data), isTemporary: true)
+                            ShelfStateViewModel.shared.add([newItem])
+                        }
+                    }
+                } catch {
+                    print("❌ Failed to convert media: \(error.localizedDescription)")
+                    showErrorAlert(title: "Media Conversion Failed", message: error.localizedDescription)
+                }
+            }
+        }
+
+        @MainActor
         private func showErrorAlert(title: String, message: String) {
             let alert = NSAlert()
             alert.messageText = title
@@ -1127,6 +1255,12 @@ final class ShelfItemViewModel: ObservableObject {
             return NSWorkspace.shared.urlForApplication(toOpen: url)
         }
         return nil
+    }
+}
+
+fileprivate extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }
 

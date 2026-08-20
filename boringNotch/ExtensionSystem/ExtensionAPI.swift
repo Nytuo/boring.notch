@@ -61,6 +61,79 @@ enum ExtensionCapability: String, CaseIterable, Codable, Hashable {
     }
 }
 
+// MARK: - Permissions
+
+/// A system permission an extension may need. Declared on the manifest so
+/// the extensions gallery can disclose what enabling a feature will ask for
+/// *before* the TCC prompt appears (F-02).
+enum Permission: Hashable {
+    case accessibility
+    case screenRecording
+    case microphone
+    case speech
+    case location
+    case fullDiskAccess
+    case inputMonitoring
+    case automation(bundleID: String)
+
+    var label: String {
+        switch self {
+        case .accessibility:
+            return NSLocalizedString("permission_accessibility", comment: "Permission: Accessibility")
+        case .screenRecording:
+            return NSLocalizedString("permission_screen_recording", comment: "Permission: Screen Recording")
+        case .microphone:
+            return NSLocalizedString("permission_microphone", comment: "Permission: Microphone")
+        case .speech:
+            return NSLocalizedString("permission_speech", comment: "Permission: Speech Recognition")
+        case .location:
+            return NSLocalizedString("permission_location", comment: "Permission: Location")
+        case .fullDiskAccess:
+            return NSLocalizedString("permission_full_disk_access", comment: "Permission: Full Disk Access")
+        case .inputMonitoring:
+            return NSLocalizedString("permission_input_monitoring", comment: "Permission: Input Monitoring")
+        case .automation:
+            return NSLocalizedString("permission_automation", comment: "Permission: Automation")
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .accessibility: return "figure.wave.circle"
+        case .screenRecording: return "rectangle.inset.filled.and.person.filled"
+        case .microphone: return "mic.fill"
+        case .speech: return "waveform"
+        case .location: return "location.fill"
+        case .fullDiskAccess: return "externaldrive.fill"
+        case .inputMonitoring: return "keyboard.fill"
+        case .automation: return "gearshape.2.fill"
+        }
+    }
+
+    /// Deep link to the relevant System Settings pane, following the pattern
+    /// `NotificationWatcher.needsAccessibility` already uses.
+    var systemSettingsURL: URL? {
+        switch self {
+        case .accessibility:
+            return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        case .screenRecording:
+            return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+        case .microphone:
+            return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
+        case .speech:
+            return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition")
+        case .location:
+            return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices")
+        case .fullDiskAccess:
+            return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
+        case .inputMonitoring:
+            return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
+        case .automation:
+            return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
+        }
+    }
+}
+
 // MARK: - Manifest
 
 /// Static description of an extension, shown in the extensions settings list.
@@ -73,6 +146,10 @@ struct ExtensionManifest: Identifiable, Hashable {
     let version: String
     let iconName: String
     let capabilities: Set<ExtensionCapability>
+    /// System permissions this extension will request once enabled. Shown in
+    /// the extensions gallery so enabling discloses this before the TCC
+    /// prompt appears (F-02).
+    let requiredPermissions: Set<Permission>
     /// `true` for extensions shipped with the app, which cannot be uninstalled.
     let isBuiltIn: Bool
 
@@ -84,6 +161,7 @@ struct ExtensionManifest: Identifiable, Hashable {
         version: String = "1.0",
         iconName: String,
         capabilities: Set<ExtensionCapability>,
+        requiredPermissions: Set<Permission> = [],
         isBuiltIn: Bool = true
     ) {
         self.id = id
@@ -93,6 +171,7 @@ struct ExtensionManifest: Identifiable, Hashable {
         self.version = version
         self.iconName = iconName
         self.capabilities = capabilities
+        self.requiredPermissions = requiredPermissions
         self.isBuiltIn = isBuiltIn
     }
 }
@@ -122,9 +201,15 @@ protocol BoringExtension: AnyObject {
 
     /// Tab this extension contributes, if any.
     var notchTab: NotchTabItem? { get }
+
+    /// Widgets this extension can place on the board (F-11), if any.
+    /// Rebuilt on every call so board content stays live rather than a
+    /// stale snapshot from whenever the extension was registered.
+    func boardWidgets() -> [BoardWidgetDescriptor]
 }
 
 extension BoringExtension {
     var settingsView: AnyView? { nil }
     var notchTab: NotchTabItem? { nil }
+    func boardWidgets() -> [BoardWidgetDescriptor] { [] }
 }

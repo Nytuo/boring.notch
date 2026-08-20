@@ -34,6 +34,17 @@ final class CaffeineExtension: BoringExtension {
     func deactivate() {
         CaffeineManager.shared.deactivate()
     }
+
+    func boardWidgets() -> [BoardWidgetDescriptor] {
+        [BoardWidgetDescriptor(
+            localID: "countdown",
+            extensionID: manifest.id,
+            title: manifest.name,
+            iconName: manifest.iconName,
+            defaultSize: .small,
+            content: AnyView(BoardCaffeineWidgetView())
+        )]
+    }
 }
 
 // MARK: - Bluetooth
@@ -88,6 +99,17 @@ final class WeatherExtension: BoringExtension {
     func deactivate() {
         WeatherManager.shared.stop()
     }
+
+    func boardWidgets() -> [BoardWidgetDescriptor] {
+        [BoardWidgetDescriptor(
+            localID: "summary",
+            extensionID: manifest.id,
+            title: manifest.name,
+            iconName: manifest.iconName,
+            defaultSize: .small,
+            content: AnyView(BoardWeatherWidgetView())
+        )]
+    }
 }
 
 // MARK: - Clipboard
@@ -115,6 +137,17 @@ final class ClipboardExtension: BoringExtension {
 
     func deactivate() {
         ClipboardManager.shared.stop()
+    }
+
+    func boardWidgets() -> [BoardWidgetDescriptor] {
+        [BoardWidgetDescriptor(
+            localID: "pinned",
+            extensionID: manifest.id,
+            title: manifest.name,
+            iconName: manifest.iconName,
+            defaultSize: .wide,
+            content: AnyView(BoardClipboardWidgetView())
+        )]
     }
 }
 
@@ -233,7 +266,8 @@ final class NotificationsExtension: BoringExtension {
         name: NSLocalizedString("extension_notifications_name", comment: "Extension name: Notifications"),
         summary: NSLocalizedString("extension_notifications_summary", comment: "Extension summary: Notifications"),
         iconName: "bell.badge.fill",
-        capabilities: [.liveActivity, .externalData]
+        capabilities: [.liveActivity, .externalData],
+        requiredPermissions: [.accessibility]
     )
 
     var isEnabled: Bool {
@@ -247,5 +281,170 @@ final class NotificationsExtension: BoringExtension {
 
     func deactivate() {
         NotificationWatcher.shared.stop()
+    }
+}
+
+// MARK: - VPN status
+
+@MainActor
+final class VPNStatusExtension: BoringExtension {
+    let manifest = ExtensionManifest(
+        id: "com.theboringteam.extension.vpn",
+        name: NSLocalizedString("extension_vpn_name", comment: "Extension name: VPN Status"),
+        summary: NSLocalizedString("extension_vpn_summary", comment: "Extension summary: VPN Status"),
+        iconName: "lock.shield.fill",
+        capabilities: [.liveActivity, .headerAccessory]
+    )
+
+    var isEnabled: Bool {
+        get { Defaults[.vpnStatusEnabled] }
+        set { Defaults[.vpnStatusEnabled] = newValue }
+    }
+
+    var settingsView: AnyView? {
+        AnyView(VStack(alignment: .leading, spacing: 6) {
+            Defaults.Toggle(key: .vpnStatusLiveActivity) {
+                Text("Show closed-notch banner on connect")
+            }
+            Defaults.Toggle(key: .vpnStatusHeaderIcon) {
+                Text("Show header icon while connected")
+            }
+        })
+    }
+
+    func activate() {
+        VPNStatusManager.shared.start()
+    }
+
+    func deactivate() {
+        VPNStatusManager.shared.stop()
+    }
+}
+
+// MARK: - Meeting mic indicator
+
+@MainActor
+final class MeetingExtension: BoringExtension {
+    let manifest = ExtensionManifest(
+        id: "com.theboringteam.extension.meeting",
+        name: NSLocalizedString("extension_meeting_name", comment: "Extension name: Meeting Mic Indicator"),
+        summary: NSLocalizedString("extension_meeting_summary", comment: "Extension summary: Meeting Mic Indicator"),
+        iconName: "mic.fill",
+        capabilities: [.liveActivity]
+        // No microphone permission requested: reading whether the input
+        // device "is running somewhere" via CoreAudio is device-state, not
+        // audio capture, so it doesn't trigger — or need — the mic TCC
+        // prompt. Declaring .microphone here would misrepresent what this
+        // actually does.
+    )
+
+    var isEnabled: Bool {
+        get { Defaults[.meetingIndicatorEnabled] }
+        set { Defaults[.meetingIndicatorEnabled] = newValue }
+    }
+
+    func activate() {
+        MeetingManager.shared.start()
+    }
+
+    func deactivate() {
+        MeetingManager.shared.stop()
+    }
+}
+
+// MARK: - AI agent progress
+
+@MainActor
+final class AgentProgressExtension: BoringExtension {
+    let manifest = ExtensionManifest(
+        id: "com.theboringteam.extension.agentprogress",
+        name: NSLocalizedString("extension_agent_name", comment: "Extension name: AI Agent Progress"),
+        summary: NSLocalizedString("extension_agent_summary", comment: "Extension summary: AI Agent Progress"),
+        iconName: "sparkles",
+        capabilities: [.liveActivity, .externalData]
+        // Listens on a fixed loopback TCP port; nothing leaves the machine.
+    )
+
+    var isEnabled: Bool {
+        get { Defaults[.agentProgressEnabled] }
+        set { Defaults[.agentProgressEnabled] = newValue }
+    }
+
+    var settingsView: AnyView? {
+        AnyView(AgentProgressSettingsView())
+    }
+
+    func activate() {
+        AgentProgressServer.shared.start()
+    }
+
+    func deactivate() {
+        AgentProgressServer.shared.stop()
+    }
+}
+
+// MARK: - Voice recorder
+
+@MainActor
+final class VoiceRecorderExtension: BoringExtension {
+    let manifest = ExtensionManifest(
+        id: "com.theboringteam.extension.voicerecorder",
+        name: NSLocalizedString("extension_voicerecorder_name", comment: "Extension name: Voice Notes"),
+        summary: NSLocalizedString("extension_voicerecorder_summary", comment: "Extension summary: Voice Notes"),
+        iconName: "mic.circle.fill",
+        capabilities: [.liveActivity, .externalData],
+        requiredPermissions: [.microphone, .speech]
+    )
+
+    var isEnabled: Bool {
+        get { Defaults[.voiceRecorderEnabled] }
+        set { Defaults[.voiceRecorderEnabled] = newValue }
+    }
+
+    var settingsView: AnyView? {
+        AnyView(Defaults.Toggle(key: .voiceRecorderAutoTranscribe) {
+            Text("Transcribe automatically after recording")
+        })
+    }
+
+    func activate() {}
+
+    func deactivate() {
+        if VoiceRecorderManager.shared.isRecording {
+            VoiceRecorderManager.shared.stopRecording()
+        }
+    }
+}
+
+// MARK: - Motion art
+
+@MainActor
+final class MotionArtExtension: BoringExtension {
+    let manifest = ExtensionManifest(
+        id: "com.theboringteam.extension.motionart",
+        name: NSLocalizedString("extension_motionart_name", comment: "Extension name: Motion Art"),
+        summary: NSLocalizedString("extension_motionart_summary", comment: "Extension summary: Motion Art"),
+        iconName: "sparkles.tv",
+        capabilities: []
+    )
+
+    var isEnabled: Bool {
+        get { Defaults[.motionArtEnabled] }
+        set { Defaults[.motionArtEnabled] = newValue }
+    }
+
+    func activate() {}
+
+    func deactivate() {}
+
+    func boardWidgets() -> [BoardWidgetDescriptor] {
+        [BoardWidgetDescriptor(
+            localID: "video",
+            extensionID: manifest.id,
+            title: manifest.name,
+            iconName: manifest.iconName,
+            defaultSize: .large,
+            content: AnyView(MotionArtWidgetView())
+        )]
     }
 }

@@ -7,6 +7,7 @@
 
 import AppKit
 import ApplicationServices
+import CoreGraphics
 import IOKit
 
 class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
@@ -19,6 +20,14 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
     private var lunarPipeHandler: JSONLinesPipeHandler?
     private var lunarStreamTask: Task<Void, Never>?
     private var lunarListener: BoringNotchXPCHelperLunarListener?
+
+    // F-32: listen-only key-down tap. `keystrokeEventTap`/
+    // `keystrokeRunLoopSource` are the only state this feature keeps — no
+    // buffer, no queue, no history of any kind, so there is nothing here
+    // that could later be read back out as a log of what was typed.
+    private var keystrokeEventTap: CFMachPort?
+    private var keystrokeRunLoopSource: CFRunLoopSource?
+    private var keystrokeExcludedBundleIDs: Set<String> = []
 
     init(connection: NSXPCConnection) {
         self.connection = connection
@@ -52,18 +61,200 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
         if let ph = pipeHandlerToClose {
             Task { await ph.close() }
         }
+
+        stopKeystrokeObserver()
     }
     
+    @objc func updateCapabilities(_ settings: [String: Bool], with reply: @escaping (Bool) -> Void) {
+        HelperLog.call("updateCapabilities")
+        HelperCapabilityGate.shared.update(settings)
+        reply(true)
+    }
+
+    @objc func setLowPowerMode(_ enabled: Bool, with reply: @escaping (Bool) -> Void) {
+        HelperLog.call("setLowPowerMode")
+        guard HelperCapabilityGate.shared.isAllowed(.power) else {
+            reply(false)
+            return
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
+        process.arguments = ["-a", "lowpowermode", enabled ? "1" : "0"]
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            reply(process.terminationStatus == 0)
+        } catch {
+            reply(false)
+        }
+    }
+
+    @objc func setFocusedWindowFrame(
+        _ x: Double, _ y: Double, _ width: Double, _ height: Double,
+        with reply: @escaping (Bool, Double, Double, Double, Double) -> Void
+    ) {
+        HelperLog.call("setFocusedWindowFrame")
+
+        guard HelperCapabilityGate.shared.isAllowed(.axWindows) else {
+            reply(false, 0, 0, 0, 0)
+            return
+        }
+        guard AXIsProcessTrusted() else {
+            reply(false, 0, 0, 0, 0)
+            return
+        }
+        guard let frontmostApp = NSWorkspace.shared.frontmostApplication else {
+            reply(false, 0, 0, 0, 0)
+            return
+        }
+
+        let axApp = AXUIElementCreateApplication(frontmostApp.processIdentifier)
+        var windowRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &windowRef) == .success,
+              let windowRef, CFGetTypeID(windowRef) == AXUIElementGetTypeID()
+        else {
+            reply(false, 0, 0, 0, 0)
+            return
+        }
+        let axWindow = windowRef as! AXUIElement
+
+        // Full-screen-space windows: repositioning them isn't meaningful,
+        // and Stage Manager windows report the same way — both skip.
+        var fullscreenRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(axWindow, "AXFullScreen" as CFString, &fullscreenRef) == .success,
+           (fullscreenRef as? Bool) == true {
+            reply(false, 0, 0, 0, 0)
+            return
+        }
+
+        var previousPosition = CGPoint.zero
+        var previousSize = CGSize.zero
+
+        var positionRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(axWindow, kAXPositionAttribute as CFString, &positionRef) == .success,
+           let positionRef {
+            AXValueGetValue(positionRef as! AXValue, .cgPoint, &previousPosition)
+        }
+        var sizeRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(axWindow, kAXSizeAttribute as CFString, &sizeRef) == .success,
+           let sizeRef {
+            AXValueGetValue(sizeRef as! AXValue, .cgSize, &previousSize)
+        }
+
+        var newPosition = CGPoint(x: x, y: y)
+        var newSize = CGSize(width: width, height: height)
+        guard let newPositionValue = AXValueCreate(.cgPoint, &newPosition),
+              let newSizeValue = AXValueCreate(.cgSize, &newSize)
+        else {
+            reply(false, 0, 0, 0, 0)
+            return
+        }
+
+        // Size before position: resizing first prevents a window near a
+        // screen edge from being clipped by its old size while mid-move.
+        let sizeStatus = AXUIElementSetAttributeValue(axWindow, kAXSizeAttribute as CFString, newSizeValue)
+        let positionStatus = AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute as CFString, newPositionValue)
+
+        let success = sizeStatus == .success && positionStatus == .success
+        reply(success, previousPosition.x, previousPosition.y, previousSize.width, previousSize.height)
+    }
+
+    // MARK: - Keystroke observer (F-32)
+
+    @objc func startKeystrokeObserver(with reply: @escaping (Bool) -> Void) {
+        HelperLog.call("startKeystrokeObserver")
+
+        guard HelperCapabilityGate.shared.isAllowed(.input) else {
+            reply(false)
+            return
+        }
+        guard keystrokeEventTap == nil else {
+            reply(true)
+            return
+        }
+
+        let eventMask: CGEventMask = 1 << CGEventType.keyDown.rawValue
+        let selfPointer = Unmanaged.passUnretained(self).toOpaque()
+
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .listenOnly,
+            eventsOfInterest: eventMask,
+            callback: { _, type, event, refcon in
+                // C callback: no captures, no allocation beyond the one
+                // Int32 handed to `reply` on the connection's listener.
+                // Nothing here is ever stored, buffered, or logged.
+                guard type == .keyDown, let refcon else {
+                    return Unmanaged.passUnretained(event)
+                }
+                let helper = Unmanaged<BoringNotchXPCHelper>.fromOpaque(refcon).takeUnretainedValue()
+
+                if let frontmostBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+                   helper.keystrokeExcludedBundleIDs.contains(frontmostBundleID) {
+                    return Unmanaged.passUnretained(event)
+                }
+
+                let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+                let pitchIndex = Int32(((keyCode % 12) + 12) % 12)
+                helper.keystrokeListenerProxy?.keystrokeDidOccur?(pitchIndex)
+                return Unmanaged.passUnretained(event)
+            },
+            userInfo: selfPointer
+        ) else {
+            reply(false)
+            return
+        }
+
+        let runLoopSource = CFMachPortCreateRunLoopSource(nil, tap, 0)
+        CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+
+        keystrokeEventTap = tap
+        keystrokeRunLoopSource = runLoopSource
+        reply(true)
+    }
+
+    @objc func stopKeystrokeObserver() {
+        HelperLog.call("stopKeystrokeObserver")
+
+        if let tap = keystrokeEventTap {
+            CGEvent.tapEnable(tap: tap, enable: false)
+        }
+        if let source = keystrokeRunLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+        }
+        keystrokeEventTap = nil
+        keystrokeRunLoopSource = nil
+    }
+
+    @objc func setKeystrokeExcludedApps(_ bundleIDs: [String]) {
+        HelperLog.call("setKeystrokeExcludedApps")
+        keystrokeExcludedBundleIDs = Set(bundleIDs)
+    }
+
+    /// Resolved fresh on every tap callback rather than cached, so a
+    /// connection that reconnects (a new listener proxy) is picked up
+    /// without needing `startKeystrokeObserver` to be called again.
+    private var keystrokeListenerProxy: BoringNotchXPCHelperLunarListener? {
+        connection?.remoteObjectProxy as? BoringNotchXPCHelperLunarListener
+    }
+
     @objc func isAccessibilityAuthorized(with reply: @escaping (Bool) -> Void) {
+        HelperLog.call("isAccessibilityAuthorized")
         reply(AXIsProcessTrusted())
     }
 
     @objc func requestAccessibilityAuthorization() {
+        HelperLog.call("requestAccessibilityAuthorization")
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         AXIsProcessTrustedWithOptions(options)
     }
 
     @objc func ensureAccessibilityAuthorization(_ promptIfNeeded: Bool, with reply: @escaping (Bool) -> Void) {
+        HelperLog.call("ensureAccessibilityAuthorization")
         if AXIsProcessTrusted() {
             reply(true)
             return
@@ -131,14 +322,17 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
     private static let keyboardClient = KeyboardBrightnessClient()
 
     @objc func isKeyboardBrightnessAvailable(with reply: @escaping (Bool) -> Void) {
+        HelperLog.call("isKeyboardBrightnessAvailable")
         reply(Self.keyboardClient.isAvailable)
     }
 
     @objc func currentKeyboardBrightness(with reply: @escaping (NSNumber?) -> Void) {
+        HelperLog.call("currentKeyboardBrightness")
         reply(Self.keyboardClient.currentBrightness().map { NSNumber(value: $0) })
     }
 
     @objc func setKeyboardBrightness(_ value: Float, with reply: @escaping (Bool) -> Void) {
+        HelperLog.call("setKeyboardBrightness")
         reply(Self.keyboardClient.setBrightness(value))
     }
     // MARK: - Screen Brightness (moved from client app into helper)
@@ -166,12 +360,14 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
     }
 
     @objc func isScreenBrightnessAvailable(with reply: @escaping (Bool) -> Void) {
+        HelperLog.call("isScreenBrightnessAvailable")
         let displayID = brightnessDisplayID()
         var b: Float = 0
         reply(displayServicesGetBrightness(displayID: displayID, out: &b) || ioServiceFor(displayID: displayID) != nil)
     }
 
     @objc func currentScreenBrightness(with reply: @escaping (NSNumber?) -> Void) {
+        HelperLog.call("currentScreenBrightness")
         let displayID = brightnessDisplayID()
         var b: Float = 0
         if displayServicesGetBrightness(displayID: displayID, out: &b) {
@@ -191,6 +387,7 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
     }
 
     @objc func setScreenBrightness(_ value: Float, with reply: @escaping (Bool) -> Void) {
+        HelperLog.call("setScreenBrightness")
         let clamped = max(0, min(1, value))
         let displayID = brightnessDisplayID()
         if displayServicesSetBrightness(displayID: displayID, value: clamped) {
@@ -207,6 +404,7 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
     }
     
     @objc func adjustScreenBrightness(by value: Float, with reply: @escaping (Bool) -> Void) {
+        HelperLog.call("adjustScreenBrightness")
         let displayID = brightnessDisplayID()
         if displayServicesSetBrightnessSmooth(displayID: displayID, value: value) {
             reply(true)
@@ -229,15 +427,18 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
     // MARK: - Lunar Events
 
     @objc func displayIDForBrightness(with reply: @escaping (NSNumber?) -> Void) {
+        HelperLog.call("displayIDForBrightness")
         let id = brightnessDisplayID()
         reply(NSNumber(value: id))
     }
 
     @objc func isLunarAvailable(with reply: @escaping (Bool) -> Void) {
+        HelperLog.call("isLunarAvailable")
         reply(FileManager.default.isExecutableFile(atPath: lunarExecutableURL.path))
     }
 
     @objc func startLunarEventStream(with reply: @escaping (Bool) -> Void) {
+        HelperLog.call("startLunarEventStream")
         lunarStateQueue.async { [weak self] in
             guard let self else {
                 reply(false)
@@ -301,6 +502,7 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
     }
 
     @objc func stopLunarEventStream() {
+        HelperLog.call("stopLunarEventStream")
         stopLunarEventStream(reason: nil)
     }
 
@@ -353,10 +555,10 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
     private static let lunarHideOSDKey = "hideOSD"
 
     @objc func setLunarOSDHidden(_ hide: Bool, with reply: @escaping (Bool) -> Void) {
+        HelperLog.call("setLunarOSDHidden")
         let appID = Self.lunarBundleID as CFString
         let key = Self.lunarHideOSDKey as CFString
         let value = hide as CFBoolean
-        NSLog("Hide OSD in Lunar: \(hide)")
         CFPreferencesSetValue(key, value, appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
         let ok = CFPreferencesSynchronize(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
         reply(ok)

@@ -52,6 +52,9 @@ final class ScreenshotManager: ObservableObject {
     private var knownFiles: Set<String> = []
     private var hasSeededKnownFiles = false
     private var expiryTask: Task<Void, Never>?
+    /// True while the F-12 editor has `latest` open, so its expiry timer
+    /// doesn't null it out from under an in-progress edit.
+    private var isEditing = false
 
     private static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "heic", "tiff", "pdf"]
 
@@ -270,6 +273,7 @@ final class ScreenshotManager: ObservableObject {
     /// the banner has gone, then lets it go.
     private func scheduleExpiry() {
         expiryTask?.cancel()
+        guard !isEditing else { return }
         let captured = latest
         expiryTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(Double(Defaults[.screenshotPreviewSeconds])))
@@ -330,5 +334,46 @@ final class ScreenshotManager: ObservableObject {
         guard let url = latest?.url else { return }
         try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
         dismiss()
+    }
+
+    // MARK: Editing (F-12)
+
+    /// Pauses the expiry timer while the editor has `latest` open.
+    func beginEditing() {
+        isEditing = true
+        expiryTask?.cancel()
+        expiryTask = nil
+    }
+
+    /// Resumes the expiry timer once the editor closes.
+    func endEditing() {
+        isEditing = false
+        guard latest != nil else { return }
+        scheduleExpiry()
+    }
+
+    /// Overwrites `url` with `image`, in the file's own format where that's
+    /// PNG or JPEG, PNG otherwise. Refreshes `latest`'s thumbnail if it is
+    /// still showing this screenshot.
+    @discardableResult
+    func saveEditedImage(_ image: NSImage, to url: URL) -> Bool {
+        guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff) else { return false }
+
+        let fileType: NSBitmapImageRep.FileType = url.pathExtension.lowercased() == "jpg" || url.pathExtension.lowercased() == "jpeg" ? .jpeg : .png
+        guard let data = bitmap.representation(using: fileType, properties: [:]) else { return false }
+
+        do {
+            try data.write(to: url, options: .atomic)
+        } catch {
+            NSLog("❌ Screenshots: could not save edited image to \(url.path): \(error.localizedDescription)")
+            return false
+        }
+
+        if let current = latest, current.url == url {
+            let thumbnail = NSImage(contentsOf: url)
+            thumbnail?.size = Self.thumbnailSize(for: thumbnail?.size ?? .zero)
+            latest = CapturedScreenshot(url: url, capturedAt: current.capturedAt, thumbnail: thumbnail)
+        }
+        return true
     }
 }

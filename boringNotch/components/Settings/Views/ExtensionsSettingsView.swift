@@ -68,11 +68,29 @@ struct ExtensionsSettings: View {
             }
             .padding(.leading, 42)
 
+            if !manifest.requiredPermissions.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "lock.shield")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(permissionsSummary(for: manifest.requiredPermissions))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.leading, 42)
+            }
+
             Text("v\(manifest.version) · \(manifest.author)")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .padding(.leading, 42)
         }
         .padding(.vertical, 4)
+    }
+
+    private func permissionsSummary(for permissions: Set<Permission>) -> String {
+        let format = NSLocalizedString("extension_requires_permissions", comment: "Prefix before the list of permissions an extension will request")
+        let names = permissions.map(\.label).sorted().joined(separator: ", ")
+        return "\(format) \(names)"
     }
 }

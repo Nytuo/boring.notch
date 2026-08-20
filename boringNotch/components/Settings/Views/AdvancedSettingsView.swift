@@ -14,6 +14,7 @@ struct Advanced: View {
     @Default(.extendHoverArea) var extendHoverArea
     @Default(.showOnLockScreen) var showOnLockScreen
     @Default(.hideFromScreenRecording) var hideFromScreenRecording
+    @Default(.capabilityAxWindowsEnabled) var capabilityAxWindowsEnabled
     
     @State private var customAccentColor: Color = .accentColor
     @State private var selectedPresetColor: PresetAccentColor? = nil
@@ -237,6 +238,24 @@ struct Advanced: View {
                     Text("App icon")
                     comingSoonBadge()
                 }
+            }
+
+            Section {
+                Defaults.Toggle(key: .capabilityPowerEnabled) {
+                    Text("Allow toggling Low Power Mode")
+                }
+                Defaults.Toggle(key: .capabilityAxWindowsEnabled) {
+                    Text("Allow window snapping")
+                }
+                .onChange(of: capabilityAxWindowsEnabled) { _, enabled in
+                    if enabled {
+                        XPCHelperClient.shared.requestAccessibilityAuthorization()
+                    }
+                }
+            } header: {
+                Text("Privileged features")
+            } footer: {
+                HelpText("Routes through the XPC helper, gated per capability. Off by default. Low Power Mode can then be toggled from a function button or the Keep Awake low-battery prompt; window snapping needs Accessibility permission and adds keyboard shortcuts under Settings > Shortcuts.")
             }
         }
         .accentColor(.effectiveAccent)

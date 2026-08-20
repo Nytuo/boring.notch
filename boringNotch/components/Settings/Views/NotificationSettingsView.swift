@@ -11,8 +11,10 @@ struct NotificationSettings: View {
 
     @Default(.notificationsEnabled) private var enabled
     @Default(.notificationsExcludedApps) private var excludedApps
+    @Default(.notificationReplyEnabled) private var replyEnabled
 
     @State private var newExclusion: String = ""
+    @State private var showReplyDisclosure = false
 
     var body: some View {
         Form {
@@ -91,9 +93,38 @@ struct NotificationSettings: View {
             } header: {
                 Text("History")
             }
+
+            Section {
+                Toggle("Allow replying from a notification banner", isOn: Binding(
+                    get: { replyEnabled },
+                    set: { newValue in
+                        if newValue {
+                            showReplyDisclosure = true
+                        } else {
+                            replyEnabled = false
+                        }
+                    }
+                ))
+                .disabled(!enabled)
+            } header: {
+                Text("Reply")
+            } footer: {
+                HelpText("Experimental and best-effort: looks for a reply field and a send button inside the notification banner's accessibility tree, which varies by app and isn't guaranteed to be found. Never logs what you type.")
+            }
         }
         .accentColor(.effectiveAccent)
         .navigationTitle("Notifications")
+        .alert(
+            NSLocalizedString("notification_reply_disclosure_title", comment: "Disclosure alert title before enabling notification reply"),
+            isPresented: $showReplyDisclosure
+        ) {
+            Button(NSLocalizedString("notification_reply_disclosure_allow", comment: "Confirm enabling notification reply"), role: .destructive) {
+                replyEnabled = true
+            }
+            Button(NSLocalizedString("notification_reply_disclosure_cancel", comment: "Cancel enabling notification reply"), role: .cancel) {}
+        } message: {
+            Text(NSLocalizedString("notification_reply_disclosure_message", comment: "Explains the experimental, best-effort nature of notification reply"))
+        }
     }
 
     @ViewBuilder

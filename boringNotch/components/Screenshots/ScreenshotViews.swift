@@ -88,6 +88,11 @@ struct ScreenshotOpenNotchBar: View {
 
             Spacer(minLength: 6)
 
+            action("pencil.and.outline", "Edit") {
+                if let url = screenshots.latest?.url {
+                    ScreenshotEditorPresenter.shared.present(url: url)
+                }
+            }
             action("doc.on.doc", "Copy") { screenshots.copyToPasteboard() }
             if shelfEnabled {
                 action("tray.and.arrow.down", "Add to Shelf") { screenshots.addToShelf() }

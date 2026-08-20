@@ -10,6 +10,7 @@ import SwiftUI
 
 struct ClockView: View {
     @ObservedObject private var clock = ClockManager.shared
+    @ObservedObject private var pomodoro = PomodoroManager.shared
     @Default(.clockMode) private var mode
 
     private var contentWidth: CGFloat { NotchViews.clock.contentWidth }
@@ -26,6 +27,7 @@ struct ClockView: View {
                 case .clock: ClockFaceView()
                 case .timer: TimerFaceView()
                 case .stopwatch: StopwatchFaceView()
+                case .pomodoro: PomodoroFaceView()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -80,6 +82,7 @@ struct ClockView: View {
         case .clock: return false
         case .timer: return clock.isTimerActive
         case .stopwatch: return clock.isStopwatchActive
+        case .pomodoro: return pomodoro.isCycleActive
         }
     }
 }
@@ -525,6 +528,149 @@ private struct StopwatchFaceView: View {
                 }
             }
             .frame(minWidth: 150, maxWidth: .infinity)
+        }
+    }
+}
+
+// MARK: - Pomodoro
+
+private struct PomodoroFaceView: View {
+    @ObservedObject private var clock = ClockManager.shared
+    @ObservedObject private var pomodoro = PomodoroManager.shared
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: clock.isTimerRunning ? 0.2 : 60)) { _ in
+            HStack(spacing: 16) {
+                countdownRing
+
+                VStack(alignment: .leading, spacing: 8) {
+                    phaseLabel
+                    sessionCount
+                    Spacer(minLength: 0)
+                    controlRow
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var countdownRing: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.white.opacity(0.12), lineWidth: 6)
+
+            Circle()
+                .trim(from: 0, to: pomodoro.isCycleActive ? clock.timerProgress : 0)
+                .stroke(
+                    ringColor,
+                    style: StrokeStyle(lineWidth: 6, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+
+            VStack(spacing: 0) {
+                Image(systemName: pomodoro.phase.iconName)
+                    .font(.system(size: 16))
+                    .foregroundStyle(ringColor)
+                    .padding(.bottom, 2)
+
+                Text(ClockManager.formatDuration(pomodoro.isCycleActive ? clock.timerRemaining : 0))
+                    .font(.system(size: 20, weight: .medium, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+            }
+            .padding(10)
+        }
+        .aspectRatio(1, contentMode: .fit)
+        .frame(maxHeight: .infinity)
+    }
+
+    private var ringColor: Color {
+        switch pomodoro.phase {
+        case .work: return Color.effectiveAccent
+        case .shortBreak, .longBreak: return .green
+        }
+    }
+
+    private var phaseLabel: some View {
+        Text(pomodoro.isCycleActive ? pomodoro.phase.label : NSLocalizedString("pomodoro_not_running", comment: "Pomodoro cycle is not running"))
+            .font(.callout.weight(.medium))
+            .foregroundStyle(.white)
+    }
+
+    private var sessionCount: some View {
+        Text(String(format: NSLocalizedString("pomodoro_sessions_completed", comment: "Number of Pomodoro work sessions completed this cycle"), pomodoro.completedWorkSessions))
+            .font(.caption)
+            .foregroundStyle(.gray)
+    }
+
+    private var controlRow: some View {
+        HStack(spacing: 8) {
+            if pomodoro.isCycleActive {
+                Button {
+                    clock.isTimerRunning ? pomodoro.pauseCurrentPhase() : pomodoro.startCurrentPhase()
+                } label: {
+                    Label(
+                        clock.isTimerRunning
+                            ? NSLocalizedString("clock_pause", comment: "Pause button")
+                            : NSLocalizedString("clock_start", comment: "Start button"),
+                        systemImage: clock.isTimerRunning ? "pause.fill" : "play.fill"
+                    )
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.effectiveAccent))
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    pomodoro.skipPhase()
+                } label: {
+                    Label(
+                        NSLocalizedString("pomodoro_skip", comment: "Skip to the next Pomodoro phase"),
+                        systemImage: "forward.end.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.white.opacity(0.1)))
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    pomodoro.stopCycle()
+                } label: {
+                    Label(
+                        NSLocalizedString("pomodoro_stop", comment: "Stop the Pomodoro cycle"),
+                        systemImage: "stop.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.white.opacity(0.1)))
+                }
+                .buttonStyle(.plain)
+            } else {
+                Button {
+                    pomodoro.startCycle()
+                } label: {
+                    Label(
+                        NSLocalizedString("pomodoro_start_cycle", comment: "Start a Pomodoro cycle"),
+                        systemImage: "play.fill"
+                    )
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.effectiveAccent))
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 }

@@ -18,6 +18,10 @@ final class DragDetector {
     var onDragEntersNotchRegion: VoidCallback?
     var onDragExitsNotchRegion: VoidCallback?
     var onDragMove: PositionCallback?
+    /// Fires once when a content drag ends, whether by drop or cancel — the
+    /// pasteboard alone can't tell the two apart. F-10's Catcher uses this to
+    /// start its auto-close countdown.
+    var onDragEnd: VoidCallback?
 
 
     private var mouseDownMonitor: Any?
@@ -95,11 +99,16 @@ final class DragDetector {
         mouseUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) { [weak self] _ in
             guard let self = self else { return }
             guard self.isDragging else { return }
-            
+
+            let wasContentDragging = self.isContentDragging
             self.isDragging = false
             self.isContentDragging = false
             self.hasEnteredNotchRegion = false
             self.pasteboardChangeCount = -1
+
+            if wasContentDragging {
+                self.onDragEnd?()
+            }
         }
     }
 

@@ -11,7 +11,13 @@ class ServiceDelegate: NSObject, NSXPCListenerDelegate {
     
     /// This method is where the NSXPCListener configures, accepts, and resumes a new incoming NSXPCConnection.
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
-        
+
+        // Reject unauthorized clients before exporting anything to them (F-01).
+        guard XPCClientValidator.isConnectionAuthorized(newConnection) else {
+            newConnection.invalidate()
+            return false
+        }
+
         // Configure the connection.
         // First, set the interface that the exported object implements.
         newConnection.exportedInterface = NSXPCInterface(with: (any BoringNotchXPCHelperProtocol).self)

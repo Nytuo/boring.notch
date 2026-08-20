@@ -25,6 +25,7 @@ struct ContentView: View {
     @ObservedObject var volumeManager = VolumeManager.shared
     @ObservedObject var lockScreenState = LockScreenState.shared
     @ObservedObject var caffeineManager = CaffeineManager.shared
+    @ObservedObject var voiceRecorderManager = VoiceRecorderManager.shared
     @ObservedObject var clockManager = ClockManager.shared
     @ObservedObject var downloadManager = DownloadManager.shared
     @ObservedObject var systemStats = SystemStatsManager.shared
@@ -76,7 +77,11 @@ struct ContentView: View {
         return max(0, baseClosedTop * scaleFactor)
     }
 
-    private var currentNotchShape: NotchShape {
+    // F-04: a notchless display has no bezel for a square-topped cutout to
+    // blend into, so it gets a fully-rounded floating pill instead. Every
+    // other call site (hover, drag-and-drop, tabs) is unchanged — only the
+    // shape differs, per `Style.floating` never being read anywhere else.
+    private var currentNotchShape: AnyShape {
         // Scale bottom corner radius for closed notch shape when scaling is enabled.
         let baseClosedBottom = cornerRadiusInsets.closed.bottom
         let bottomCorner: CGFloat
@@ -89,10 +94,14 @@ struct ContentView: View {
             bottomCorner = displayClosedNotchHeight > 0 ? baseClosedBottom : 0
         }
 
-        return NotchShape(
+        guard vm.hasNotch else {
+            return AnyShape(IslandShape(cornerRadius: max(topCornerRadius, bottomCorner)))
+        }
+
+        return AnyShape(NotchShape(
             topCornerRadius: topCornerRadius,
             bottomCornerRadius: bottomCorner
-        )
+        ))
     }
 
     private var computedChinWidth: CGFloat {
@@ -121,6 +130,20 @@ struct ContentView: View {
         } else if coordinator.expandingView.type == .screenshot && coordinator.expandingView.show
             && vm.notchState == .closed && Defaults[.screenshotCatcherEnabled]
         {
+            chinWidth = liveActivityWidth
+        } else if coordinator.expandingView.type == .vpn && coordinator.expandingView.show
+            && vm.notchState == .closed && Defaults[.vpnStatusEnabled] && Defaults[.vpnStatusLiveActivity]
+        {
+            chinWidth = liveActivityWidth
+        } else if coordinator.expandingView.type == .meeting && coordinator.expandingView.show
+            && vm.notchState == .closed && Defaults[.meetingIndicatorEnabled]
+        {
+            chinWidth = liveActivityWidth
+        } else if coordinator.expandingView.type == .agentProgress && coordinator.expandingView.show
+            && vm.notchState == .closed && Defaults[.agentProgressEnabled]
+        {
+            chinWidth = liveActivityWidth
+        } else if voiceRecorderManager.isRecording && vm.notchState == .closed && Defaults[.voiceRecorderEnabled] {
             chinWidth = liveActivityWidth
         } else if lockScreenState.isLocked && Defaults[.lockScreenWidgetsEnabled]
             && Defaults[.showOnLockScreen] && vm.notchState == .closed
@@ -474,6 +497,20 @@ struct ContentView: View {
                         && vm.notchState == .closed && Defaults[.screenshotCatcherEnabled]
                       {
                           ScreenshotLiveActivity(closedNotchHeight: displayClosedNotchHeight)
+                      } else if coordinator.expandingView.type == .vpn && coordinator.expandingView.show
+                        && vm.notchState == .closed && Defaults[.vpnStatusEnabled] && Defaults[.vpnStatusLiveActivity]
+                      {
+                          VPNLiveActivity(closedNotchHeight: displayClosedNotchHeight)
+                      } else if coordinator.expandingView.type == .meeting && coordinator.expandingView.show
+                        && vm.notchState == .closed && Defaults[.meetingIndicatorEnabled]
+                      {
+                          MeetingLiveActivity(closedNotchHeight: displayClosedNotchHeight)
+                      } else if coordinator.expandingView.type == .agentProgress && coordinator.expandingView.show
+                        && vm.notchState == .closed && Defaults[.agentProgressEnabled]
+                      {
+                          AgentProgressLiveActivity(closedNotchHeight: displayClosedNotchHeight)
+                      } else if voiceRecorderManager.isRecording && vm.notchState == .closed && Defaults[.voiceRecorderEnabled] {
+                          VoiceRecorderLiveActivity(closedNotchHeight: displayClosedNotchHeight)
                       } else if coordinator.shouldShowSneakPeek(on: vm.screenUUID) && Defaults[.inlineOSD] && (coordinator.sneakPeekState(for: vm.screenUUID).type != .music) && (coordinator.sneakPeekState(for: vm.screenUUID).type != .battery) && vm.notchState == .closed {
                           InlineOSD(
                               type: coordinator.binding(for: vm.screenUUID).type,
@@ -588,6 +625,10 @@ struct ContentView: View {
                         SystemStatsView()
                     case .bluetooth:
                         BluetoothDevicesView()
+                    case .board:
+                        BoardView()
+                    case .launcher:
+                        LauncherView()
                     }
                 }
                 // No explicit width: the panel hugs whatever the current view

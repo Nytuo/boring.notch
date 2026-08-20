@@ -17,6 +17,10 @@ private enum ActionKind: String, CaseIterable, Identifiable {
     case openTab
     case toggleCaffeine
     case toggleMicrophone
+    case cycleAudioOutput
+    case toggleLowPowerMode
+    case openEmojiPicker
+    case toggleVoiceRecording
 
     var id: String { rawValue }
 
@@ -29,6 +33,10 @@ private enum ActionKind: String, CaseIterable, Identifiable {
         case .openTab: return NSLocalizedString("function_kind_open_tab", comment: "Action kind: open a notch tab")
         case .toggleCaffeine: return NSLocalizedString("function_action_caffeine", comment: "Function button: toggle Keep Awake")
         case .toggleMicrophone: return NSLocalizedString("function_action_microphone", comment: "Function button: toggle microphone")
+        case .cycleAudioOutput: return NSLocalizedString("function_action_audio_output", comment: "Function button: cycle audio output device")
+        case .toggleLowPowerMode: return NSLocalizedString("function_action_low_power", comment: "Function button: toggle Low Power Mode")
+        case .openEmojiPicker: return NSLocalizedString("function_action_emoji", comment: "Function button: open the emoji picker")
+        case .toggleVoiceRecording: return NSLocalizedString("function_action_voice_recording", comment: "Function button: start/stop a voice note")
         }
     }
 
@@ -58,6 +66,10 @@ private enum ActionKind: String, CaseIterable, Identifiable {
         case .openTab: self = .openTab
         case .toggleCaffeine: self = .toggleCaffeine
         case .toggleMicrophone: self = .toggleMicrophone
+        case .cycleAudioOutput: self = .cycleAudioOutput
+        case .toggleLowPowerMode: self = .toggleLowPowerMode
+        case .openEmojiPicker: self = .openEmojiPicker
+        case .toggleVoiceRecording: self = .toggleVoiceRecording
         }
     }
 
@@ -70,6 +82,10 @@ private enum ActionKind: String, CaseIterable, Identifiable {
         case .openTab: return .openTab(tab: tab)
         case .toggleCaffeine: return .toggleCaffeine
         case .toggleMicrophone: return .toggleMicrophone
+        case .cycleAudioOutput: return .cycleAudioOutput
+        case .toggleLowPowerMode: return .toggleLowPowerMode
+        case .openEmojiPicker: return .openEmojiPicker
+        case .toggleVoiceRecording: return .toggleVoiceRecording
         }
     }
 }

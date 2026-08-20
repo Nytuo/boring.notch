@@ -17,6 +17,10 @@
 	<string>boring.notch analyzes audio from your music app to draw a real-time waveform in the notch. Audio is processed locally and never leaves your Mac.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>boring.notch reads nearby Bluetooth accessories so it can show connection changes and battery levels in the notch.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>boring.notch records audio only when you start a voice note from the shelf. Recordings are saved locally and never leave your Mac unless you share them yourself.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>boring.notch can transcribe your voice notes on-device, entirely on your Mac. Audio and transcripts are never sent anywhere.</string>
 	<key>SUEnableDownloaderService</key>
 	<true/>
 	<key>SUEnableInstallerLauncherService</key>

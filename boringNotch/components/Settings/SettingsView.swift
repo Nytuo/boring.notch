@@ -23,11 +23,14 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     case bluetooth
     case weather
     case shelf
+    case board
+    case launcher
     case clipboard
     case appSwitcher
     case downloads
     case screenshots
     case functionButtons
+    case keystrokeSounds
     case notifications
     case extensions
     case lockScreen
@@ -53,11 +56,14 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .bluetooth: "Bluetooth"
         case .weather: "Weather"
         case .shelf: "Shelf"
+        case .board: "Board"
+        case .launcher: "Launcher"
         case .clipboard: "Clipboard"
         case .appSwitcher: "App Switcher"
         case .downloads: "Downloads"
         case .screenshots: "Screenshots"
         case .functionButtons: "Function Buttons"
+        case .keystrokeSounds: "Keystroke Sounds"
         case .notifications: "Notifications"
         case .extensions: "Extensions"
         case .lockScreen: "Lock Screen"
@@ -83,11 +89,14 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .bluetooth: "wave.3.right.circle"
         case .weather: "cloud.sun.fill"
         case .shelf: "books.vertical"
+        case .board: "square.grid.2x2"
+        case .launcher: "sparkle.magnifyingglass"
         case .clipboard: "doc.on.clipboard"
         case .appSwitcher: "square.grid.2x2"
         case .downloads: "arrow.down.circle"
         case .screenshots: "camera.viewfinder"
         case .functionButtons: "button.programmable"
+        case .keystrokeSounds: "keyboard.badge.waveform"
         case .notifications: "bell.badge"
         case .extensions: "puzzlepiece.extension"
         case .lockScreen: "lock.display"
@@ -150,6 +159,10 @@ struct SettingsView: View {
                     WeatherSettings()
                 case .shelf:
                     Shelf()
+                case .board:
+                    BoardSettings()
+                case .launcher:
+                    LauncherSettings()
                 case .clipboard:
                     ClipboardSettings()
                 case .appSwitcher:
@@ -160,6 +173,8 @@ struct SettingsView: View {
                     ScreenshotSettings()
                 case .functionButtons:
                     FunctionButtonSettings()
+                case .keystrokeSounds:
+                    KeystrokeSoundSettings()
                 case .notifications:
                     NotificationSettings()
                 case .extensions:

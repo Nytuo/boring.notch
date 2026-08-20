@@ -22,6 +22,7 @@ enum NotchHeaderItem: String, CaseIterable, Identifiable, Codable, Defaults.Seri
     case bluetooth
     case systemStats
     case battery
+    case vpn
 
     var id: String { rawValue }
 
@@ -31,7 +32,8 @@ enum NotchHeaderItem: String, CaseIterable, Identifiable, Codable, Defaults.Seri
         .caffeine,
         .bluetooth,
         .systemStats,
-        .battery
+        .battery,
+        .vpn
     ]
 
     var label: String {
@@ -48,6 +50,8 @@ enum NotchHeaderItem: String, CaseIterable, Identifiable, Codable, Defaults.Seri
             return NSLocalizedString("layout_item_stats", comment: "Notch header item: system stats")
         case .battery:
             return NSLocalizedString("layout_item_battery", comment: "Notch header item: battery")
+        case .vpn:
+            return NSLocalizedString("layout_item_vpn", comment: "Notch header item: VPN status")
         }
     }
 
@@ -59,6 +63,7 @@ enum NotchHeaderItem: String, CaseIterable, Identifiable, Codable, Defaults.Seri
         case .bluetooth: return "wave.3.right.circle"
         case .systemStats: return "chart.line.uptrend.xyaxis"
         case .battery: return "battery.100"
+        case .vpn: return "lock.shield.fill"
         }
     }
 
@@ -73,6 +78,7 @@ enum NotchHeaderItem: String, CaseIterable, Identifiable, Codable, Defaults.Seri
         case .bluetooth: return Defaults[.bluetoothNotchIcon]
         case .systemStats: return Defaults[.systemStatsEnabled] && Defaults[.systemStatsNotchIcon]
         case .battery: return Defaults[.showBatteryIndicator]
+        case .vpn: return Defaults[.vpnStatusEnabled] && Defaults[.vpnStatusHeaderIcon] && VPNStatusManager.shared.isConnected
         }
     }
 
@@ -91,6 +97,8 @@ enum NotchHeaderItem: String, CaseIterable, Identifiable, Codable, Defaults.Seri
             return NSLocalizedString("layout_setting_stats", comment: "Setting that enables the system stats item")
         case .battery:
             return NSLocalizedString("layout_setting_battery", comment: "Setting that enables the battery item")
+        case .vpn:
+            return NSLocalizedString("layout_setting_vpn", comment: "Setting that enables the VPN status item")
         }
     }
 }
@@ -108,10 +116,12 @@ enum NotchTabItem: String, CaseIterable, Identifiable, Codable, Defaults.Seriali
     case clock
     case systemStats
     case bluetooth
+    case board
+    case launcher
 
     var id: String { rawValue }
 
-    static let defaultOrder: [NotchTabItem] = [.player, .shelf, .calendar, .weather, .clipboard, .apps, .clock, .systemStats, .bluetooth]
+    static let defaultOrder: [NotchTabItem] = [.player, .shelf, .calendar, .weather, .clipboard, .apps, .clock, .systemStats, .bluetooth, .board, .launcher]
 
     /// The player was called "home" until it was renamed for what it actually
     /// is, so a tab order or button action stored by an older build still
@@ -135,6 +145,8 @@ enum NotchTabItem: String, CaseIterable, Identifiable, Codable, Defaults.Seriali
         case .clock: return .clock
         case .systemStats: return .systemStats
         case .bluetooth: return .bluetooth
+        case .board: return .board
+        case .launcher: return .launcher
         }
     }
 
@@ -149,6 +161,8 @@ enum NotchTabItem: String, CaseIterable, Identifiable, Codable, Defaults.Seriali
         case .clock: return NSLocalizedString("tab_clock", comment: "Notch tab: Clock")
         case .systemStats: return NSLocalizedString("tab_stats", comment: "Notch tab: System stats")
         case .bluetooth: return NSLocalizedString("tab_bluetooth", comment: "Notch tab: Bluetooth devices")
+        case .board: return NSLocalizedString("tab_board", comment: "Notch tab: Board")
+        case .launcher: return NSLocalizedString("tab_launcher", comment: "Notch tab: Launcher")
         }
     }
 
@@ -163,6 +177,8 @@ enum NotchTabItem: String, CaseIterable, Identifiable, Codable, Defaults.Seriali
         case .clock: return "clock.fill"
         case .systemStats: return "chart.line.uptrend.xyaxis"
         case .bluetooth: return "wave.3.right.circle.fill"
+        case .board: return "square.grid.2x2"
+        case .launcher: return "sparkle.magnifyingglass"
         }
     }
 
@@ -203,6 +219,8 @@ enum NotchTabItem: String, CaseIterable, Identifiable, Codable, Defaults.Seriali
         case .clock: return Defaults[.clockEnabled] && Defaults[.clockShowInNotch]
         case .systemStats: return Defaults[.systemStatsEnabled]
         case .bluetooth: return Defaults[.bluetoothNotchIcon]
+        case .board: return Defaults[.boardEnabled]
+        case .launcher: return Defaults[.launcherEnabled]
         }
     }
 }
