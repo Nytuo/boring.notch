@@ -41,6 +41,14 @@ struct ContentView: View {
 
     @State private var haptics: Bool = false
 
+    // F-04: the window's origin and the mouse's screen position at the start
+    // of the current Option-drag, captured once per drag so
+    // `floatingRepositionGesture` can compute an absolute new origin each
+    // event instead of accumulating per-event deltas (see that property's
+    // doc comment for why the accumulated-delta approach drifted).
+    @State private var floatingDragOrigin: NSPoint?
+    @State private var floatingDragStartMouse: NSPoint?
+
     @Namespace var albumArtNamespace
 
     @Default(.showNotHumanFace) var showNotHumanFace
@@ -102,6 +110,74 @@ struct ContentView: View {
             topCornerRadius: topCornerRadius,
             bottomCornerRadius: bottomCorner
         ))
+    }
+
+    /// F-04: Option-drag repositions the floating pill anywhere on a
+    /// notchless display, rather than only through the settings sliders.
+    ///
+    /// This moves the actual `NSWindow`, not a SwiftUI offset — the window is
+    /// a small fixed-size canvas near the top of the screen, and a content
+    /// offset can only slide the pill around *inside* that canvas. Past its
+    /// edge the pill would be pushed outside the window's own bounds and
+    /// clipped to invisibility despite the stored offset still "existing",
+    /// which is how it previously got lost. Clamping to `screen.frame` here
+    /// guarantees the window can never end up somewhere it can't be dragged
+    /// back from.
+    ///
+    /// Gated on Option so an ordinary drag — dropping a file onto the shelf,
+    /// or a media gesture — is never mistaken for a reposition; on a notched
+    /// display it does nothing, since there is nothing to reposition.
+    ///
+    /// Deliberately ignores the gesture's own `value.translation`: that is
+    /// measured relative to this view's window, which is the very thing being
+    /// moved — as the window chases the cursor, the view-relative distance
+    /// between them stops reflecting how far the mouse actually moved, so the
+    /// window either drifts (over-corrects) or stutters (under-corrects).
+    /// `NSEvent.mouseLocation` is screen-absolute and has no such feedback
+    /// loop, so positions are computed as start-of-drag-plus-total-mouse-delta
+    /// rather than accumulated per-event deltas.
+    private var floatingRepositionGesture: some Gesture {
+        DragGesture(minimumDistance: 2, coordinateSpace: .global)
+            .onChanged { _ in
+                guard !vm.hasNotch, NSEvent.modifierFlags.contains(.option),
+                      let window = vm.hostWindow, let screen = window.screen
+                else { return }
+
+                if floatingDragOrigin == nil {
+                    floatingDragOrigin = window.frame.origin
+                    floatingDragStartMouse = NSEvent.mouseLocation
+                }
+                guard let startOrigin = floatingDragOrigin, let startMouse = floatingDragStartMouse else { return }
+
+                let currentMouse = NSEvent.mouseLocation
+                let newOrigin = NSPoint(
+                    x: startOrigin.x + (currentMouse.x - startMouse.x),
+                    y: startOrigin.y + (currentMouse.y - startMouse.y)
+                )
+                window.setFrameOrigin(clampedOrigin(newOrigin, size: window.frame.size, in: screen.frame))
+            }
+            .onEnded { _ in
+                floatingDragOrigin = nil
+                floatingDragStartMouse = nil
+                guard !vm.hasNotch, let window = vm.hostWindow, let screen = window.screen else { return }
+
+                let screenFrame = screen.frame
+                let defaultOrigin = NSPoint(
+                    x: screenFrame.origin.x + screenFrame.width / 2 - window.frame.width / 2,
+                    y: screenFrame.origin.y + screenFrame.height - window.frame.height
+                )
+                // Persisted as an offset from the default centered/top spot,
+                // matching what the settings sliders read and write.
+                Defaults[.floatingNotchHorizontalOffset] = window.frame.origin.x - defaultOrigin.x
+                Defaults[.floatingNotchTopGap] = defaultOrigin.y - window.frame.origin.y
+            }
+    }
+
+    private func clampedOrigin(_ origin: NSPoint, size: NSSize, in screenFrame: NSRect) -> NSPoint {
+        NSPoint(
+            x: min(max(origin.x, screenFrame.minX), screenFrame.maxX - size.width),
+            y: min(max(origin.y, screenFrame.minY), screenFrame.maxY - size.height)
+        )
     }
 
     private var computedChinWidth: CGFloat {
@@ -274,10 +350,16 @@ struct ContentView: View {
                 
                 mainLayout
                     // Fixed-height tabs (player, shelf, clock) keep their
-                    // envelope so their controls do not jump about.
+                    // envelope so their controls do not jump about. Top-aligned
+                    // so that if a tab's content ever outgrows this height
+                    // regardless, the overflow spills below the panel instead
+                    // of both ways — pushing the top off the screen, which is
+                    // otherwise invisible and unrecoverable since the window
+                    // is already pinned to the screen's top edge.
                     .frame(
                         height: (vm.notchState == .open && !coordinator.currentView.hugsContent)
-                            ? openPanelHeight : nil
+                            ? openPanelHeight : nil,
+                        alignment: .top
                     )
                     // Content-hugging tabs get no height frame at all,
                     // deliberately: a frame with a `maxHeight` takes the whole
@@ -293,6 +375,7 @@ struct ContentView: View {
                             .animation(.smooth, value: gestureProgress)
                     }
                     .contentShape(Rectangle())
+                    .simultaneousGesture(floatingRepositionGesture)
                     .onHover { hovering in
                         handleHover(hovering)
                     }

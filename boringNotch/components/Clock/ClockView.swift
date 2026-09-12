@@ -33,29 +33,39 @@ struct ClockView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(width: contentWidth, alignment: .leading)
-        .frame(maxHeight: .infinity)
+        // Explicit top alignment: `.frame(maxHeight:)` defaults to centering,
+        // which drops this tab's content below the top edge whenever the
+        // panel offers more height than the mode picker's fixed-size buttons
+        // need — unlike the other tabs, whose content stretches to fill it.
+        .frame(maxHeight: .infinity, alignment: .top)
         .padding(.horizontal, 4)
     }
 
     /// Vertical rail rather than a segmented control across the top: it costs
     /// width the panel has to spare instead of height it does not, and leaves
     /// the whole right side to the active face.
+    ///
+    /// Sized to fit 4 items (Clock/Timer/Stopwatch/Pomodoro) inside the fixed
+    /// `NotchOpenSize.standard` envelope this tab shares with the player and
+    /// shelf — at the 40pt-tall, 6pt-spaced sizing this had before Pomodoro
+    /// added a 4th item, the rail no longer fit and pushed the top of the
+    /// panel above the screen.
     private var modePicker: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 4) {
             ForEach(ClockMode.allCases) { item in
                 let selected = mode == item
                 Button {
                     withAnimation(.smooth(duration: 0.2)) { mode = item }
                 } label: {
-                    VStack(spacing: 3) {
+                    VStack(spacing: 2) {
                         Image(systemName: item.iconName)
-                            .font(.system(size: 13))
+                            .font(.system(size: 12))
                         Text(item.label)
-                            .font(.system(size: 9))
+                            .font(.system(size: 8))
                             .lineLimit(1)
                     }
                     .foregroundStyle(selected ? .white : .gray)
-                    .frame(width: 62, height: 40)
+                    .frame(width: 62, height: 30)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
                             .fill(selected ? Color(nsColor: .secondarySystemFill) : .clear)

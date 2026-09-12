@@ -197,6 +197,10 @@ enum MusicPlayerImageSizes {
            let topRightNotchpadding: CGFloat = screen.auxiliaryTopRightArea?.width
         {
             notchWidth = screen.frame.width - topLeftNotchpadding - topRightNotchpadding + 4
+        } else {
+            // No physical notch to measure means nothing constrains the
+            // pill's width — F-04 leaves that to the user instead.
+            notchWidth = Defaults[.floatingNotchWidth]
         }
         notchHeight = screen.safeAreaInsets.top > 0 ? Defaults[.notchHeight] : Defaults[.nonNotchHeight]
     }

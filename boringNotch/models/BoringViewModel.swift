@@ -39,6 +39,12 @@ class BoringViewModel: NSObject, ObservableObject {
     let webcamManager = WebcamManager.shared
     @Published var isCameraExpanded: Bool = false
     @Published var isRequestingAuthorization: Bool = false
+
+    /// The `NSWindow` hosting this view model's `ContentView`, set once by the
+    /// app delegate right after creating it. F-04's Option-drag reposition
+    /// gesture moves this window directly — a SwiftUI-side offset can't move
+    /// the pill past the fixed window's own bounds.
+    weak var hostWindow: NSWindow?
     
     deinit {
         destroy()
@@ -182,15 +188,25 @@ class BoringViewModel: NSObject, ObservableObject {
     }
     
     func isMouseHovering(position: NSPoint = NSEvent.mouseLocation) -> Bool {
+        // F-04: the floating pill on a notchless display can be dragged
+        // anywhere on screen, clamped to stay fully visible — read its actual
+        // (already-clamped) window frame rather than re-deriving a position
+        // from the stored offset, which could drift from where the window
+        // really ended up after clamping.
+        if !hasNotch, let window = hostWindow {
+            let frame = window.frame
+            return position.x >= frame.minX && position.x <= frame.maxX
+                && position.y >= frame.minY && position.y <= frame.maxY
+        }
+
         let screenFrame = getScreenFrame(screenUUID)
         if let frame = screenFrame {
-            
             let baseY = frame.maxY - notchSize.height
             let baseX = frame.midX - notchSize.width / 2
-            
+
             return position.y >= baseY && position.x >= baseX && position.x <= baseX + notchSize.width
         }
-        
+
         return false
     }
 

@@ -64,6 +64,7 @@
 		0E8C5BDDDB3692D0A32EB7D8 /* LauncherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAE6B15531891A410761D7BD /* LauncherView.swift */; };
 		0BCC44D7E6C640F083E0CF76 /* LauncherSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADBABDCB6C416B9262FCEB3E /* LauncherSettingsView.swift */; };
 		8E3FE1BB018D67379944175A /* AgentProgressDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 989A68ECF3D508CFA57242E7 /* AgentProgressDefaults.swift */; };
+		87D6D4A99206F4735EC2EAD3 /* FloatingNotchDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5008D7B0EA4C5A0C052422A3 /* FloatingNotchDefaults.swift */; };
 		7F462B021BEFE824653CEDE6 /* AgentProgressViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 422A9FE9EF83DCC594A436C6 /* AgentProgressViews.swift */; };
 		C4F3AF8F6BD7C24CA2670649 /* AgentProgressSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A3F767030F3BA26D4743D20 /* AgentProgressSettingsView.swift */; };
 		EC563FBEC8381331DAA49AF5 /* QueuePopoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9133AE195543D597058E700A /* QueuePopoverView.swift */; };
@@ -349,6 +350,7 @@
 		BAE6B15531891A410761D7BD /* LauncherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LauncherView.swift; sourceTree = "<group>"; };
 		ADBABDCB6C416B9262FCEB3E /* LauncherSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LauncherSettingsView.swift; sourceTree = "<group>"; };
 		989A68ECF3D508CFA57242E7 /* AgentProgressDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentProgressDefaults.swift; sourceTree = "<group>"; };
+		5008D7B0EA4C5A0C052422A3 /* FloatingNotchDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingNotchDefaults.swift; sourceTree = "<group>"; };
 		422A9FE9EF83DCC594A436C6 /* AgentProgressViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentProgressViews.swift; sourceTree = "<group>"; };
 		3A3F767030F3BA26D4743D20 /* AgentProgressSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentProgressSettingsView.swift; sourceTree = "<group>"; };
 		9133AE195543D597058E700A /* QueuePopoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueuePopoverView.swift; sourceTree = "<group>"; };
@@ -912,8 +914,9 @@
 				B8E3892694774015082696FB /* AppSwitcherManager.swift */,
 			
 				D2D12B485B2F84FEB9F4F9D6 /* DownloadManager.swift */,
-			
+
 				A34D26606357BD96F322B105 /* NotificationWatcher.swift */,
+				5008D7B0EA4C5A0C052422A3 /* FloatingNotchDefaults.swift */,
 			);
 			path = managers;
 			sourceTree = "<group>";
@@ -1578,6 +1581,7 @@
 				0E8C5BDDDB3692D0A32EB7D8 /* LauncherView.swift in Sources */,
 				0BCC44D7E6C640F083E0CF76 /* LauncherSettingsView.swift in Sources */,
 				8E3FE1BB018D67379944175A /* AgentProgressDefaults.swift in Sources */,
+				87D6D4A99206F4735EC2EAD3 /* FloatingNotchDefaults.swift in Sources */,
 				7F462B021BEFE824653CEDE6 /* AgentProgressViews.swift in Sources */,
 				C4F3AF8F6BD7C24CA2670649 /* AgentProgressSettingsView.swift in Sources */,
 				59C4CA5011D8BEF93BE628CB /* ScreenshotEditorView.swift in Sources */,

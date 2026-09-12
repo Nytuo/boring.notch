@@ -235,14 +235,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // media-player size, which is no longer what any panel measures.
         let notchHeight = NotchOpenSize.largest.height
         let notchWidth = NotchOpenSize.largest.width
-        
+
+        // F-04: the floating pill on a notchless display can be dragged
+        // anywhere on screen, so the drag-to-open region tracks the window's
+        // actual (already-clamped) frame rather than re-deriving one from the
+        // stored offset, which could drift from where it really ended up.
+        let origin: CGPoint
+        if screen.safeAreaInsets.top > 0 {
+            origin = CGPoint(x: screenFrame.midX - notchWidth / 2, y: screenFrame.maxY - notchHeight)
+        } else if let uuid = screen.displayUUID, let window = windows[uuid] ?? self.window {
+            origin = window.frame.origin
+        } else {
+            origin = CGPoint(x: screenFrame.midX - notchWidth / 2, y: screenFrame.maxY - notchHeight)
+        }
+
         // Create notch region at the top-center of the screen where an open notch would occupy
-        let notchRegion = CGRect(
-            x: screenFrame.midX - notchWidth / 2,
-            y: screenFrame.maxY - notchHeight,
-            width: notchWidth,
-            height: notchHeight
-        )
+        let notchRegion = CGRect(origin: origin, size: CGSize(width: notchWidth, height: notchHeight))
         
         let detector = DragDetector(notchRegion: notchRegion)
 
@@ -370,11 +378,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let screenFrame = screen.frame
-        window.setFrameOrigin(
-            NSPoint(
-                x: screenFrame.origin.x + (screenFrame.width / 2) - window.frame.width / 2,
-                y: screenFrame.origin.y + screenFrame.height - window.frame.height
-            ))
+        var origin = NSPoint(
+            x: screenFrame.origin.x + (screenFrame.width / 2) - window.frame.width / 2,
+            y: screenFrame.origin.y + screenFrame.height - window.frame.height
+        )
+
+        // F-04: the floating pill on a notchless display can be repositioned
+        // (Option-drag, or the settings sliders), stored as an offset from
+        // this default centered/top spot. Clamped so a screen-configuration
+        // change (or a stale offset from a differently-sized display) can
+        // never place the window somewhere it can't be dragged back from.
+        if screen.safeAreaInsets.top <= 0 {
+            origin.x += Defaults[.floatingNotchHorizontalOffset]
+            origin.y -= Defaults[.floatingNotchTopGap]
+            origin.x = min(max(origin.x, screenFrame.minX), screenFrame.maxX - window.frame.width)
+            origin.y = min(max(origin.y, screenFrame.minY), screenFrame.maxY - window.frame.height)
+        }
+
+        window.setFrameOrigin(origin)
         window.alphaValue = 1
     }
 
@@ -692,6 +713,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 if windows[uuid] == nil {
                     let viewModel = BoringViewModel(screenUUID: uuid)
                     let window = createBoringNotchWindow(for: screen, with: viewModel)
+                    viewModel.hostWindow = window
 
                     windows[uuid] = window
                     viewModels[uuid] = viewModel
@@ -727,6 +749,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             if window == nil {
                 window = createBoringNotchWindow(for: selectedScreen, with: vm)
+                vm.hostWindow = window
             }
 
             if let window = window {

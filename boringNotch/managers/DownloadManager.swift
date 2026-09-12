@@ -139,6 +139,16 @@ final class DownloadManager: ObservableObject {
     private var watchedURL: URL?
     /// Last size sample per download, for working out the transfer rate.
     private var rateSamples: [String: (bytes: Int64, date: Date)] = [:]
+    /// Bytes and timestamp last time a download's size actually changed.
+    ///
+    /// A cancelled or paused download leaves its partial file sitting in
+    /// Downloads indefinitely (Safari in particular keeps the `.download`
+    /// bundle around so the user can resume it), so "a partial file exists"
+    /// is not the same as "something is downloading." Anything that hasn't
+    /// grown in `stallThreshold` is treated as abandoned and dropped from
+    /// `activeDownloads`, so the notch indicator does not stay lit forever.
+    private var lastProgressAt: [String: (bytes: Int64, date: Date)] = [:]
+    private let stallThreshold: TimeInterval = 10
     /// Finished files seen on the previous scan, so an arrival can be spotted.
     private var knownFiles: Set<String> = []
     private var hasSeededKnownFiles = false
@@ -310,6 +320,8 @@ final class DownloadManager: ObservableObject {
         accessedURL = nil
         watchedURL = nil
         activeDownloads = []
+        rateSamples = [:]
+        lastProgressAt = [:]
         // Re-seed on the next start, so restarting does not announce every file
         // already sitting in the folder.
         knownFiles = []
@@ -328,10 +340,12 @@ final class DownloadManager: ObservableObject {
         )) ?? []
 
         var found: [ActiveDownload] = []
+        var stillOnDisk: Set<String> = []
 
         for url in contents {
             guard let browser = DownloadBrowser.forPartialFile(at: url) else { continue }
             guard isBrowserEnabled(browser) else { continue }
+            stillOnDisk.insert(url.path)
 
             let bytes = sizeOfPartial(at: url)
             let fileName = url.deletingPathExtension().lastPathComponent
@@ -339,6 +353,17 @@ final class DownloadManager: ObservableObject {
             // Preserve the original start time across rescans so the entry does
             // not look like it restarts every poll.
             let existing = activeDownloads.first { $0.id == url.path }
+
+            let now = Date()
+            if let progress = lastProgressAt[url.path], progress.bytes == bytes {
+                if now.timeIntervalSince(progress.date) > stallThreshold {
+                    // Hasn't grown in a while — cancelled or paused. Drop it
+                    // rather than showing a download that will never finish.
+                    continue
+                }
+            } else {
+                lastProgressAt[url.path] = (bytes, now)
+            }
 
             found.append(
                 ActiveDownload(
@@ -353,9 +378,13 @@ final class DownloadManager: ObservableObject {
             )
         }
 
-        // Forget the rate history of anything that is no longer in flight.
+        // Forget the rate history of anything that is no longer in flight, and the
+        // stall clock for anything that no longer exists on disk at all — a
+        // stalled entry's clock must survive being dropped from `found`, or it
+        // would reset every scan and the entry would flicker back in forever.
         let live = Set(found.map(\.id))
         rateSamples = rateSamples.filter { live.contains($0.key) }
+        lastProgressAt = lastProgressAt.filter { stillOnDisk.contains($0.key) }
 
         let previous = Set(activeDownloads.map(\.id))
         let current = Set(found.map(\.id))

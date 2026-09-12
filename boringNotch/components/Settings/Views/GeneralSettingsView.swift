@@ -32,6 +32,9 @@ struct GeneralSettings: View {
     @Default(.openNotchOnHover) var openNotchOnHover
     @Default(.enableOpeningAnimation) var enableOpeningAnimation
     @Default(.animationSpeedMultiplier) var animationSpeedMultiplier
+    @Default(.floatingNotchWidth) var floatingNotchWidth
+    @Default(.floatingNotchHorizontalOffset) var floatingNotchHorizontalOffset
+    @Default(.floatingNotchTopGap) var floatingNotchTopGap
 
     var body: some View {
         Form {
@@ -162,6 +165,8 @@ struct GeneralSettings: View {
                 Text("Notch sizing")
             }
 
+            floatingPosition()
+
             NotchBehaviour()
 
             gestureControls()
@@ -186,6 +191,60 @@ struct GeneralSettings: View {
             }
         } message: {
             Text("Changing the app language requires restarting Boring Notch.")
+        }
+    }
+
+    @ViewBuilder
+    func floatingPosition() -> some View {
+        Section {
+            Slider(value: $floatingNotchWidth, in: 120...320, step: 5) {
+                HStack {
+                    Text("Width")
+                    Spacer()
+                    Text("\(floatingNotchWidth, specifier: "%.0f")pt")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .onChange(of: floatingNotchWidth) {
+                NotificationCenter.default.post(
+                    name: Notification.Name.notchHeightChanged, object: nil)
+            }
+            Slider(value: $floatingNotchHorizontalOffset, in: -900...900, step: 5) {
+                HStack {
+                    Text("Horizontal position")
+                    Spacer()
+                    Text("\(floatingNotchHorizontalOffset, specifier: "%.0f")pt")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .onChange(of: floatingNotchHorizontalOffset) {
+                NotificationCenter.default.post(
+                    name: Notification.Name.notchHeightChanged, object: nil)
+            }
+            Slider(value: $floatingNotchTopGap, in: -100...300, step: 1) {
+                HStack {
+                    Text("Vertical position")
+                    Spacer()
+                    Text("\(floatingNotchTopGap, specifier: "%.0f")pt")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .onChange(of: floatingNotchTopGap) {
+                NotificationCenter.default.post(
+                    name: Notification.Name.notchHeightChanged, object: nil)
+            }
+            Button("Reset position") {
+                floatingNotchHorizontalOffset = 0
+                floatingNotchTopGap = 8
+                NotificationCenter.default.post(
+                    name: Notification.Name.notchHeightChanged, object: nil)
+            }
+        } header: {
+            Text("Floating position")
+        } footer: {
+            Text("Only applies to displays without a physical notch. Option-drag the pill itself to reposition it anywhere on screen; these sliders are for fine-tuning or to undo a drag.")
+                .foregroundStyle(.secondary)
+                .font(.caption)
         }
     }
 
